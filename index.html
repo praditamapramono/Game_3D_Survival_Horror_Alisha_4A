@@ -1,0 +1,3171 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>JANGAN SAMPAI DIKETEMU OLEH HENRI — 3D Survival Horror</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-void: #07070b;
+      --crimson: #dc2626;
+      --amber: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: var(--bg-void);
+      color: #f3f4f6;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+
+    #threeCanvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      z-index: 0;
+      touch-action: none;
+    }
+
+    .font-horror {
+      font-family: 'Creepster', cursive;
+      letter-spacing: 0.06em;
+    }
+
+    .font-clock {
+      font-family: 'Share Tech Mono', monospace;
+    }
+
+    @keyframes titleFlicker {
+      0%, 19%, 23%, 27%, 54%, 58%, 100% {
+        text-shadow: 0 0 14px rgba(220, 38, 38, 0.9), 0 0 36px rgba(153, 27, 27, 0.65);
+        opacity: 1;
+      }
+      21%, 25%, 56% {
+        text-shadow: none;
+        opacity: 0.7;
+      }
+    }
+
+    .horror-title {
+      animation: titleFlicker 4.8s infinite;
+    }
+
+    @keyframes dangerVignettePulse {
+      0%, 100% { box-shadow: inset 0 0 55px rgba(220, 38, 38, 0.25); }
+      50% { box-shadow: inset 0 0 130px rgba(220, 38, 38, 0.82); }
+    }
+
+    .chase-vignette {
+      animation: dangerVignettePulse 0.75s ease-in-out infinite;
+      pointer-events: none;
+    }
+
+    .base-vignette {
+      background: radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.82) 100%);
+      pointer-events: none;
+    }
+
+    .btn-crimson {
+      background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
+      border: 1px solid rgba(252, 165, 165, 0.45);
+      box-shadow: 0 10px 28px rgba(185, 28, 28, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+      transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease;
+    }
+    .btn-crimson:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 34px rgba(220, 38, 38, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      filter: brightness(1.08);
+    }
+    .btn-crimson:active {
+      transform: translateY(1px) scale(0.98);
+    }
+
+    .btn-slate {
+      background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+      border: 1px solid rgba(148, 163, 184, 0.35);
+      box-shadow: 0 10px 26px rgba(15, 23, 42, 0.65), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+      transition: transform 0.16s ease, border-color 0.16s ease;
+    }
+    .btn-slate:hover {
+      transform: translateY(-2px);
+      border-color: rgba(96, 165, 250, 0.7);
+    }
+    .btn-slate:active {
+      transform: translateY(1px) scale(0.98);
+    }
+
+    .eyelid-bar {
+      transition: height 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .dying-vision-overlay {
+      background: radial-gradient(circle at center, rgba(127, 29, 29, 0.18) 25%, rgba(69, 10, 10, 0.78) 72%, rgba(0, 0, 0, 0.96) 100%);
+      backdrop-filter: blur(0px);
+      transition: backdrop-filter 1.4s ease-in, opacity 0.6s ease-in;
+    }
+    .dying-vision-overlay.active {
+      backdrop-filter: blur(5px);
+    }
+  </style>
+</head>
+<body class="relative w-full h-full overflow-hidden bg-[#07070b]">
+
+  <!-- Live 3D WebGL Viewport -->
+  <canvas id="threeCanvas"></canvas>
+
+  <!-- Subtle Horror Screen Vignette -->
+  <div id="baseVignette" class="fixed inset-0 base-vignette z-10"></div>
+
+  <!-- Chase Danger Red Vignette -->
+  <div id="chaseVignette" class="hidden fixed inset-0 chase-vignette z-20"></div>
+
+  <!-- Full-Screen 2D Blood Splatter & Dripping Streaks Canvas Overlay -->
+  <canvas id="bloodOverlayCanvas" class="hidden fixed inset-0 w-full h-full z-30 pointer-events-none"></canvas>
+
+  <!-- Dying Tunnel Vision & Blur Overlay -->
+  <div id="dyingOverlay" class="hidden fixed inset-0 dying-vision-overlay z-30 pointer-events-none opacity-0"></div>
+
+  <!-- Jumpscare Flash Overlay -->
+  <div id="jumpscareFlash" class="hidden fixed inset-0 bg-red-600/55 z-30 pointer-events-none"></div>
+
+  <!-- Jumpscare & Death Spoken Subtitle Overlay (Always Includes Henri) -->
+  <div id="jumpscareSubtitleBox" class="hidden fixed bottom-10 inset-x-4 z-40 flex justify-center pointer-events-none">
+    <div class="max-w-xl px-5 py-3.5 rounded-2xl bg-black/92 border-2 border-red-600 shadow-[0_0_40px_rgba(220,38,38,0.85)] text-center backdrop-blur-md">
+      <div class="text-[11px] font-black uppercase tracking-widest text-red-500 mb-0.5">SUARA HENRI</div>
+      <p id="jumpscareSubtitleText" class="text-base sm:text-xl font-extrabold text-red-100 italic tracking-wide">
+        Henri: "Udah Rina mati, sekarang ibunya..."
+      </p>
+    </div>
+  </div>
+
+  <!-- Eyelid Closing Curtains (Sleep & Death Cutscene) -->
+  <div id="eyelidTop" class="fixed top-0 inset-x-0 h-0 bg-black z-30 pointer-events-none eyelid-bar"></div>
+  <div id="eyelidBottom" class="fixed bottom-0 inset-x-0 h-0 bg-black z-30 pointer-events-none eyelid-bar"></div>
+
+  <!-- Top-Right Audio Toggle Button -->
+  <button id="btnToggleAudio" type="button" aria-label="Suara"
+    class="fixed top-3 right-3 z-50 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-zinc-950/85 hover:bg-zinc-900 border border-zinc-700/70 text-xs sm:text-sm font-semibold text-gray-200 shadow-xl backdrop-blur-md transition active:scale-95">
+    <span id="audioIcon">🔊</span>
+    <span id="audioLabel" class="hidden sm:inline">Suara: Aktif</span>
+  </button>
+
+  <!-- =========================================================
+       UI 1: TITLE SCREEN & 3D CHARACTER SELECTION
+  ========================================================= -->
+  <section id="uiTitle" class="relative z-20 w-full h-full flex flex-col justify-between p-4 sm:p-8 pointer-events-none">
+    <!-- Top Header -->
+    <div class="text-center max-w-3xl mx-auto pt-2 sm:pt-4 space-y-2">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-red-950/85 border border-red-700/60 text-red-300 text-[11px] sm:text-xs font-extrabold uppercase tracking-widest backdrop-blur-md">
+        <span>🕯️</span>
+        <span>3D First-Person Survival Horror</span>
+      </div>
+      <h1 class="horror-title font-horror text-4xl sm:text-6xl md:text-7xl text-red-500 leading-none tracking-wider">
+        JANGAN SAMPAI DIKETEMU OLEH HENRI
+      </h1>
+      <p class="text-xs sm:text-sm text-gray-300 max-w-xl mx-auto drop-shadow">
+        Bertahanlah selama <span class="text-amber-300 font-bold">3 Malam</span>. Tidurlah saat <span class="text-red-400 font-bold">Henri</span> memintamu, atau kabur dan sembunyi sebelum <span class="text-red-400 font-bold">Henri</span> menangkapmu!
+      </p>
+    </div>
+
+    <!-- Bottom Character Selection Cards & Start Button -->
+    <div class="w-full max-w-3xl mx-auto space-y-3 pointer-events-auto">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <!-- Character 1: Rina (Perempuan) -->
+        <button id="cardRina" type="button"
+          class="p-4 rounded-2xl border-2 border-red-500 bg-zinc-950/85 shadow-[0_0_25px_rgba(220,38,38,0.3)] backdrop-blur-md text-left transition active:scale-[0.99]">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-base sm:text-lg font-extrabold text-rose-300">👩 Rina (Perempuan)</span>
+            <span id="tagRina" class="px-2 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-extrabold uppercase">Dipilih</span>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            Langkah kaki lebih senyap & pemulihan stamina <span class="text-emerald-400 font-bold">+30% lebih cepat</span> saat berlari dari Henri.
+          </p>
+        </button>
+
+        <!-- Character 2: Raka (Laki-laki) -->
+        <button id="cardRaka" type="button"
+          class="p-4 rounded-2xl border-2 border-zinc-800 bg-zinc-950/75 hover:border-blue-500/60 backdrop-blur-md text-left transition active:scale-[0.99]">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-base sm:text-lg font-extrabold text-sky-300">👨 Raka (Laki-laki)</span>
+            <span id="tagRaka" class="hidden px-2 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-extrabold uppercase">Dipilih</span>
+          </div>
+          <p class="text-xs text-gray-300 leading-relaxed">
+            Sorot senter 3D lebih luas & jauh serta kapasitas stamina maksimal <span class="text-sky-400 font-bold">130%</span>.
+          </p>
+        </button>
+      </div>
+
+      <button id="btnStartNight1" type="button"
+        class="btn-crimson w-full py-4 px-6 rounded-2xl text-white font-extrabold text-base sm:text-lg uppercase tracking-widest">
+        🚪 MULAI MALAM PERTAMA (00:00)
+      </button>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       UI 2: 3D MIDNIGHT BEDROOM EVENT & CHOICE
+  ========================================================= -->
+  <section id="uiBedroom" class="hidden relative z-20 w-full h-full flex flex-col justify-between p-4 sm:p-7 pointer-events-none">
+    <!-- Top Night & Clock Badge -->
+    <div class="flex items-center justify-between max-w-4xl w-full mx-auto">
+      <div class="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-zinc-950/85 border border-red-800/60 backdrop-blur-md">
+        <span class="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping"></span>
+        <span id="bedroomNightLabel" class="font-extrabold text-xs sm:text-sm uppercase tracking-wider text-red-400">MALAM 1 / 3</span>
+      </div>
+      <div class="px-4 py-2 rounded-xl bg-zinc-950/85 border border-zinc-800 font-clock text-lg sm:text-2xl text-red-500 tracking-widest mr-12 sm:mr-28 backdrop-blur-md">
+        00:00
+      </div>
+    </div>
+
+    <!-- Bottom Dialogue & Choice Cards -->
+    <div class="w-full max-w-3xl mx-auto space-y-3 pointer-events-auto">
+      <div class="p-4 sm:p-5 rounded-2xl bg-zinc-950/90 border border-red-900/70 shadow-2xl backdrop-blur-md">
+        <div class="flex items-center gap-2 mb-1.5">
+          <span class="px-2.5 py-0.5 rounded bg-red-950 text-red-400 border border-red-800/60 text-xs font-extrabold uppercase tracking-wider">HENRI</span>
+          <span class="text-xs text-gray-400">Henri berdiri di ambang pintu kamarmu...</span>
+        </div>
+        <p id="henriMidnightLine" class="text-sm sm:text-base md:text-lg text-gray-100 italic leading-relaxed">
+          Henri: "Sudah tengah malam... Tidurlah sekarang. Jangan pernah keluar dari kamar ini..."
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <button id="btnSleepChoice" type="button"
+          class="btn-slate p-4 sm:p-5 rounded-2xl text-left flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-base sm:text-lg font-extrabold text-blue-300">🛌 TIDUR (Aman dari Henri)</span>
+          </div>
+          <p class="text-xs text-gray-300 mt-1">
+            Turuti perintah Henri. Rebahkan kepala di bantal dan pejamkan mata hingga pukul 06:00 pagi.
+          </p>
+        </button>
+
+        <button id="btnAwakeChoice" type="button"
+          class="btn-crimson p-4 sm:p-5 rounded-2xl text-left flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-base sm:text-lg font-extrabold text-white">🔦 JANGAN TIDUR (Kabur dari Henri)</span>
+          </div>
+          <p class="text-xs text-red-100 mt-1">
+            Bangun dari ranjang! Kumpulkan 3 Kunci Keluar atau bertahan sampai 06:00 sebelum Henri menangkapmu.
+          </p>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       UI 3: SLEEP CUTSCENE OVERLAY
+  ========================================================= -->
+  <section id="uiSleepCutscene" class="hidden relative z-40 w-full h-full flex flex-col items-center justify-center p-5 text-center pointer-events-none">
+    <div class="w-full max-w-md p-6 rounded-3xl bg-zinc-950/90 border border-zinc-800/90 backdrop-blur-md space-y-4 pointer-events-auto shadow-2xl">
+      <div id="sleepCutsceneNight" class="text-xs font-extrabold uppercase tracking-widest text-blue-400">MALAM 1 — TERPEJAM DI BALIK SELIMUT</div>
+      <div class="py-3 px-6 rounded-2xl bg-black border border-zinc-800 inline-block">
+        <div id="sleepClockText" class="font-clock text-4xl sm:text-5xl text-red-500 tracking-widest">00:00</div>
+      </div>
+      <p id="sleepNarrativeText" class="text-sm text-gray-300 min-h-[3rem] flex items-center justify-center">
+        Kamu memejamkan mata... Langkah berat Henri terdengar di luar pintu kamar...
+      </p>
+      <div class="w-full h-2 bg-zinc-900 rounded-full overflow-hidden border border-zinc-800">
+        <div id="sleepBarFill" class="h-full bg-gradient-to-r from-red-600 via-blue-500 to-amber-400 w-0 transition-all duration-150"></div>
+      </div>
+      <button id="btnAfterSleepNext" type="button"
+        class="hidden w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-sm sm:text-base tracking-wide shadow-lg transition">
+        LANJUT KE MALAM BERIKUTNYA →
+      </button>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       UI 4: 3D FIRST-PERSON STEALTH HUD & TOUCH CONTROLS
+  ========================================================= -->
+  <section id="uiStealthHUD" class="hidden relative z-20 w-full h-full pointer-events-none">
+    <!-- Top Status Bar -->
+    <div class="fixed top-3 left-3 right-14 sm:right-36 flex flex-wrap items-center justify-between gap-2">
+      <!-- Night & Clock -->
+      <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-zinc-950/85 border border-zinc-800 backdrop-blur-md shadow-lg">
+        <span id="hudNightBadge" class="text-xs sm:text-sm font-extrabold text-red-400">MALAM 1/3</span>
+        <span class="text-zinc-600">|</span>
+        <span id="hudClock" class="font-clock text-base sm:text-xl font-bold text-amber-300">00:00</span>
+        <span class="text-[11px] text-gray-400 hidden sm:inline">/ 06:00</span>
+      </div>
+
+      <!-- Keys & Henri Alert Status -->
+      <div class="flex items-center gap-2.5 px-3.5 py-2 rounded-xl bg-zinc-950/85 border border-zinc-800 backdrop-blur-md shadow-lg">
+        <span class="text-xs sm:text-sm font-extrabold text-amber-400">🔑 Kunci: <span id="hudKeysCount">0/3</span></span>
+        <span class="text-zinc-600">|</span>
+        <span id="hudHenriStatus" class="text-xs font-extrabold uppercase tracking-wider text-emerald-400">HENRI: PATROLI</span>
+      </div>
+    </div>
+
+    <!-- Objective & Pointer Lock Hint -->
+    <div class="fixed top-14 left-3 right-3 flex flex-col items-start gap-1">
+      <div id="hudObjectiveText" class="px-3 py-1 rounded-lg bg-black/75 border border-zinc-800/90 text-[11px] sm:text-xs text-gray-200 backdrop-blur-sm">
+        Cari <span class="text-amber-300 font-bold">3 Kunci Keluar</span> & buka <span class="text-emerald-300 font-bold">Pintu Keluar Utama</span>, atau bertahan dari <span class="text-red-400 font-bold">Henri</span> hingga <span class="text-white font-bold">06:00</span>!
+      </div>
+      <div id="hudLookHint" class="px-2.5 py-0.5 rounded bg-zinc-900/75 text-[10px] text-gray-400">
+        Klik layar untuk kunci kursor mouse, atau seret layar / tekan <kbd class="text-gray-200">Q</kbd> & <kbd class="text-gray-200">R</kbd> untuk menengok
+      </div>
+    </div>
+
+    <!-- Live Henri Voice / Whisper Subtitle Banner During Stealth -->
+    <div id="stealthHenriSubtitleBox" class="hidden fixed bottom-36 sm:bottom-24 inset-x-4 flex justify-center pointer-events-none">
+      <div class="max-w-lg px-4 py-2 rounded-xl bg-zinc-950/90 border border-red-700/80 shadow-[0_0_25px_rgba(220,38,38,0.45)] backdrop-blur-md text-center">
+        <p id="stealthHenriSubtitleText" class="text-xs sm:text-sm font-bold text-red-200 italic">
+          Henri: "Aku mendengar suara langkahmu..."
+        </p>
+      </div>
+    </div>
+
+    <!-- Center Crosshair & Contextual Interaction Prompt -->
+    <div class="fixed inset-0 flex flex-col items-center justify-center pointer-events-none">
+      <div id="crosshairDot" class="w-2 h-2 rounded-full bg-white/75 border border-black/60 shadow"></div>
+      <div id="interactPrompt" class="hidden mt-4 px-4 py-2 rounded-xl bg-zinc-950/90 border border-amber-400/80 text-amber-300 font-extrabold text-xs sm:text-sm shadow-[0_0_20px_rgba(245,158,11,0.4)] backdrop-blur-md">
+        [E] Interaksi
+      </div>
+    </div>
+
+    <!-- Bottom Stamina & Touch/Mobile Action Controls -->
+    <div class="fixed bottom-3 inset-x-3 flex items-end justify-between">
+      <!-- Left: Stamina Bar & Virtual Move Joystick -->
+      <div class="flex flex-col gap-2 pointer-events-auto">
+        <div id="touchJoyZone" class="relative w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-zinc-950/55 border-2 border-zinc-700/65 backdrop-blur-sm flex items-center justify-center touch-none">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-zinc-500 pointer-events-none">Jalan</span>
+          <div id="touchJoyKnob" class="absolute w-11 h-11 rounded-full bg-zinc-200/85 border-2 border-white shadow-lg pointer-events-none"></div>
+        </div>
+
+        <div class="w-44 sm:w-52 p-2.5 rounded-xl bg-zinc-950/85 border border-zinc-800 backdrop-blur-md">
+          <div class="flex justify-between text-[10px] font-extrabold uppercase tracking-wider text-gray-400 mb-1">
+            <span id="hudCharLabel">Rina</span>
+            <span id="hudStaminaText">100%</span>
+          </div>
+          <div class="w-full h-2 rounded-full bg-zinc-800 overflow-hidden">
+            <div id="hudStaminaFill" class="h-full bg-gradient-to-r from-sky-500 to-emerald-400 w-full transition-all duration-75"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Action Buttons (Interact, Turn Q/R, Flashlight, Sprint) -->
+      <div class="flex flex-col items-end gap-2 pointer-events-auto">
+        <button id="btnHudInteract" type="button"
+          class="hidden px-4 py-3 rounded-2xl bg-amber-600 hover:bg-amber-500 active:scale-95 text-white font-extrabold text-xs sm:text-sm border border-amber-300 shadow-lg transition">
+          ✋ <span id="btnHudInteractLabel">Interaksi [E]</span>
+        </button>
+
+        <div class="flex items-center gap-1.5 sm:hidden">
+          <button id="btnTurnLeft" type="button" class="px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-zinc-700 text-xs font-bold text-gray-200 active:bg-zinc-700">↺ Tengok Kiri</button>
+          <button id="btnTurnRight" type="button" class="px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-zinc-700 text-xs font-bold text-gray-200 active:bg-zinc-700">Tengok Kanan ↻</button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <button id="btnHudFlashlight" type="button"
+            class="px-3.5 py-3 rounded-2xl bg-zinc-950/90 hover:bg-zinc-900 active:scale-95 border border-amber-500/50 text-amber-300 font-bold text-xs sm:text-sm shadow-lg">
+            🔦 Senter [F]
+          </button>
+          <button id="btnHudSprint" type="button"
+            class="px-4 py-3 rounded-2xl bg-red-950/90 hover:bg-red-900 active:scale-95 border border-red-600/60 text-red-200 font-extrabold text-xs sm:text-sm shadow-lg">
+            🏃 Lari [Shift]
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       UI 5: NIGHT ESCAPED / SURVIVED TRANSITION
+  ========================================================= -->
+  <section id="uiNightSurvived" class="hidden relative z-30 w-full h-full flex flex-col items-center justify-center p-5 text-center">
+    <div class="w-full max-w-lg p-6 sm:p-8 rounded-3xl bg-zinc-950/92 border border-emerald-600/60 shadow-[0_0_60px_rgba(16,185,129,0.25)] backdrop-blur-md space-y-4">
+      <div class="inline-block px-3 py-1 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-xs font-bold uppercase tracking-wider">
+        Pukul 06:00 Pagi Tiba
+      </div>
+      <h2 class="text-2xl sm:text-4xl font-extrabold text-white">
+        KAMU BERHASIL SELAMAT DARI HENRI!
+      </h2>
+      <p id="nightSurvivedSummary" class="text-sm sm:text-base text-gray-300 leading-relaxed">
+        Cahaya fajar menyinari rumah dan Henri tidak bisa mengejarmu lagi!
+      </p>
+      <button id="btnNextNightAwake" type="button"
+        class="w-full py-3.5 px-6 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-extrabold text-base tracking-wide shadow-lg transition">
+        LANJUT KE MALAM BERIKUTNYA →
+      </button>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       UI 6: JUMPSCARE / VISCERAL DEATH GAME OVER SCREEN
+  ========================================================= -->
+  <section id="uiGameOver" class="hidden relative z-40 w-full h-full flex flex-col items-center justify-center p-3 sm:p-5 text-center bg-black/85 backdrop-blur-sm overflow-y-auto">
+    <div class="w-full max-w-xl my-auto p-4 sm:p-6 rounded-3xl bg-zinc-950/95 border-2 border-red-600 shadow-[0_0_90px_rgba(220,38,38,0.8)] space-y-3.5">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-red-950/90 border border-red-700/70 text-red-400 text-[11px] font-extrabold uppercase tracking-widest">
+        <span>🩸</span>
+        <span>Jumpscare Henri — Kamu Tewas</span>
+      </div>
+
+      <h2 class="font-horror text-3xl sm:text-5xl text-red-600 tracking-wider drop-shadow-[0_0_22px_rgba(220,38,38,0.95)] leading-none">
+        KAMU DIBUNUH OLEH HENRI
+      </h2>
+
+      <!-- Henri's Dynamic Taunt Quote (Explicitly Includes Henri) -->
+      <div class="p-3 rounded-2xl bg-red-950/50 border border-red-700/80 shadow-inner">
+        <p id="henriDeathTauntQuote" class="text-sm sm:text-lg font-extrabold text-red-200 italic">
+          <span class="text-red-500 font-black not-italic uppercase tracking-wider">Henri:</span> "Udah Rina mati, sekarang ibunya..."
+        </p>
+      </div>
+
+      <!-- Polaroid Photograph of Dead Mother -->
+      <div class="flex flex-col items-center justify-center">
+        <div class="relative bg-zinc-200 p-2.5 pb-6 rounded-lg shadow-[0_12px_35px_rgba(0,0,0,0.95)] border border-zinc-400 transform -rotate-1 max-w-[290px] sm:max-w-[320px] w-full">
+          <canvas id="motherPhotoCanvas" width="320" height="205" class="w-full h-auto rounded bg-black block border border-zinc-800"></canvas>
+          <div class="mt-1.5 flex items-center justify-between px-1">
+            <span id="motherPhotoCaption" class="font-horror text-base sm:text-lg text-red-800 tracking-wider">
+              HENRI: "IBUMU SUDAH MATI..."
+            </span>
+            <span class="text-[10px] font-mono font-bold text-zinc-700">06:00 AM</span>
+          </div>
+        </div>
+      </div>
+
+      <p id="gameOverMessage" class="text-xs sm:text-sm text-gray-300 leading-relaxed">
+        Henri berwajah hitam dengan mata merah, gigi panjang, dan kuku berdarah menghabisi nyawamu, lalu mendatangi ibumu...
+      </p>
+
+      <div class="flex flex-col sm:flex-row gap-2.5 pt-1">
+        <button id="btnRetryCurrentNight" type="button"
+          class="btn-crimson flex-1 py-3 px-4 rounded-2xl text-white font-extrabold text-sm sm:text-base uppercase tracking-wider">
+          🔄 Ulangi Malam Ini
+        </button>
+        <button id="btnReturnMainMenu" type="button"
+          class="py-3 px-4 rounded-2xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-gray-200 font-bold text-sm sm:text-base transition">
+          🏠 Menu Utama
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       UI 7: DAY 3 VICTORY ENDING (HENRI RETURNS TO NORMAL)
+  ========================================================= -->
+  <section id="uiVictory" class="hidden relative z-40 w-full h-full flex flex-col justify-end sm:justify-center items-center p-4 sm:p-6 text-center pointer-events-none">
+    <div class="w-full max-w-2xl p-5 sm:p-7 rounded-3xl bg-zinc-950/85 border-2 border-amber-400/80 shadow-[0_0_80px_rgba(245,158,11,0.45)] backdrop-blur-md space-y-4 pointer-events-auto">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/60 text-amber-300 text-xs font-extrabold uppercase tracking-widest">
+        <span>☀️</span>
+        <span>HARI KETIGA SELAMAT — HENRI KEMBALI NORMAL</span>
+      </div>
+
+      <h2 class="text-2xl sm:text-4xl font-extrabold text-amber-300 leading-tight">
+        HENRI KEMBALI MENJADI ORANG NORMAL! KAMU MENANG!
+      </h2>
+
+      <p class="p-3.5 rounded-2xl bg-zinc-900/90 border border-amber-500/30 text-xs sm:text-base text-gray-100 italic leading-relaxed">
+        <span class="text-amber-400 font-black not-italic uppercase">Henri:</span> "Matahari telah terbit... Kutukan tiga malam ini akhirnya hilang. Terima kasih sudah bertahan, aku sudah kembali menjadi diriku yang normal!"
+      </p>
+
+      <!-- Final Run Stats -->
+      <div id="victoryStatsGrid" class="grid grid-cols-3 gap-2.5 text-center"></div>
+
+      <button id="btnVictoryPlayAgain" type="button"
+        class="w-full py-3.5 sm:py-4 px-6 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-extrabold text-base sm:text-lg tracking-wider uppercase shadow-[0_10px_30px_rgba(245,158,11,0.45)] transition">
+        🌅 MAIN LAGI
+      </button>
+    </div>
+  </section>
+
+  <!-- =========================================================
+       3D ENGINE, AI, PHYSICS & PROCEDURAL AUDIO SCRIPT
+  ========================================================= -->
+  <script>
+    window.addEventListener('load', () => {
+      'use strict';
+
+      /* ==========================================================
+         1. PROCEDURAL WEB AUDIO HORROR & SUNRISE SOUND ENGINE
+      ========================================================== */
+      class ProceduralAudio {
+        constructor() {
+          this.ctx = null;
+          this.enabled = true;
+          this.dronePlaying = false;
+          this.droneOsc1 = null;
+          this.droneOsc2 = null;
+          this.droneGain = null;
+        }
+
+        ensureContext() {
+          if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+              this.ctx = new AudioCtx();
+            }
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume().catch(() => {});
+          }
+        }
+
+        toggle() {
+          this.enabled = !this.enabled;
+          if (!this.enabled) {
+            this.stopDrone();
+          } else {
+            this.ensureContext();
+            this.startDrone();
+          }
+          return this.enabled;
+        }
+
+        startDrone() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx || this.dronePlaying) return;
+          try {
+            const now = this.ctx.currentTime;
+            this.droneOsc1 = this.ctx.createOscillator();
+            this.droneOsc2 = this.ctx.createOscillator();
+            const filter = this.ctx.createBiquadFilter();
+            this.droneGain = this.ctx.createGain();
+
+            this.droneOsc1.type = 'sawtooth';
+            this.droneOsc1.frequency.setValueAtTime(44, now);
+            this.droneOsc2.type = 'sine';
+            this.droneOsc2.frequency.setValueAtTime(32.7, now);
+
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(120, now);
+
+            this.droneGain.gain.setValueAtTime(0.001, now);
+            this.droneGain.gain.exponentialRampToValueAtTime(0.055, now + 2.0);
+
+            this.droneOsc1.connect(filter);
+            this.droneOsc2.connect(filter);
+            filter.connect(this.droneGain);
+            this.droneGain.connect(this.ctx.destination);
+
+            this.droneOsc1.start();
+            this.droneOsc2.start();
+            this.dronePlaying = true;
+          } catch (e) {}
+        }
+
+        stopDrone() {
+          if (this.dronePlaying) {
+            try {
+              this.droneOsc1.stop();
+              this.droneOsc2.stop();
+            } catch (e) {}
+            this.dronePlaying = false;
+          }
+        }
+
+        playClick() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(360, now);
+          osc.frequency.exponentialRampToValueAtTime(150, now + 0.07);
+          gain.gain.setValueAtTime(0.08, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        }
+
+        playDoorCreak() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const filter = this.ctx.createBiquadFilter();
+          const gain = this.ctx.createGain();
+
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(145, now);
+          osc.frequency.linearRampToValueAtTime(215, now + 0.25);
+          osc.frequency.linearRampToValueAtTime(110, now + 0.65);
+
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(420, now);
+          filter.Q.setValueAtTime(6, now);
+
+          gain.gain.setValueAtTime(0.07, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.68);
+
+          osc.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.7);
+        }
+
+        playClockTick(high = false) {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(high ? 940 : 710, now);
+          osc.frequency.exponentialRampToValueAtTime(190, now + 0.045);
+          gain.gain.setValueAtTime(0.075, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.055);
+        }
+
+        playPlayerStep(sprinting = false) {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(sprinting ? 125 : 90, now);
+          osc.frequency.exponentialRampToValueAtTime(38, now + 0.07);
+          gain.gain.setValueAtTime(sprinting ? 0.07 : 0.03, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.075);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        }
+
+        playHenriFootstep(distance = 10) {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const maxDist = 28;
+          if (distance > maxDist) return;
+          const atten = Math.pow(1 - distance / maxDist, 1.5);
+          const vol = Math.max(0.005, atten * 0.22);
+
+          const now = this.ctx.currentTime;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(78, now);
+          osc.frequency.exponentialRampToValueAtTime(26, now + 0.16);
+          gain.gain.setValueAtTime(vol, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.17);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.18);
+        }
+
+        playHeartbeat(intensity = 0.5) {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const vol = Math.min(0.24, 0.05 + intensity * 0.19);
+          [0, 0.15].forEach((offset, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(idx === 0 ? 70 : 54, now + offset);
+            osc.frequency.exponentialRampToValueAtTime(28, now + offset + 0.13);
+            gain.gain.setValueAtTime(vol, now + offset);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.14);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.15);
+          });
+        }
+
+        playKeyJingle() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          [1046.5, 1318.5, 1567.98, 2093].forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + i * 0.065);
+            gain.gain.setValueAtTime(0.1, now + i * 0.065);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.065 + 0.3);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + i * 0.065);
+            osc.stop(now + i * 0.065 + 0.32);
+          });
+        }
+
+        playChaseSting() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          [196, 207.65, 392, 415.3].forEach((freq) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(freq, now);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.72, now + 0.45);
+            gain.gain.setValueAtTime(0.085, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.48);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.5);
+          });
+        }
+
+        playWardrobeRip() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          const bufferSize = Math.floor(this.ctx.sampleRate * 0.45);
+          const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+          const data = buffer.getChannelData(0);
+          for (let i = 0; i < bufferSize; i++) {
+            data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.14));
+          }
+          const noise = this.ctx.createBufferSource();
+          noise.buffer = buffer;
+
+          const filter = this.ctx.createBiquadFilter();
+          filter.type = 'bandpass';
+          filter.frequency.setValueAtTime(340, now);
+          filter.Q.setValueAtTime(1.5, now);
+
+          const gain = this.ctx.createGain();
+          gain.gain.setValueAtTime(0.28, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+          noise.connect(filter);
+          filter.connect(gain);
+          gain.connect(this.ctx.destination);
+          noise.start(now);
+
+          const thud = this.ctx.createOscillator();
+          const thudGain = this.ctx.createGain();
+          thud.type = 'sine';
+          thud.frequency.setValueAtTime(115, now);
+          thud.frequency.exponentialRampToValueAtTime(28, now + 0.35);
+          thudGain.gain.setValueAtTime(0.25, now);
+          thudGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+          thud.connect(thudGain);
+          thudGain.connect(this.ctx.destination);
+          thud.start(now);
+          thud.stop(now + 0.38);
+        }
+
+        playDeathGrabScreech() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+
+          const screechFreqs = [138.59, 196.0, 277.18, 415.3, 622.25, 932.33, 1244.5];
+          screechFreqs.forEach((f) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(f * 1.15, now);
+            osc.frequency.exponentialRampToValueAtTime(f * 0.62, now + 0.85);
+            gain.gain.setValueAtTime(0.095, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.88);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.9);
+          });
+
+          const grabOsc = this.ctx.createOscillator();
+          const grabGain = this.ctx.createGain();
+          grabOsc.type = 'sine';
+          grabOsc.frequency.setValueAtTime(110, now);
+          grabOsc.frequency.exponentialRampToValueAtTime(24, now + 0.42);
+          grabGain.gain.setValueAtTime(0.32, now);
+          grabGain.gain.exponentialRampToValueAtTime(0.001, now + 0.44);
+          grabOsc.connect(grabGain);
+          grabGain.connect(this.ctx.destination);
+          grabOsc.start(now);
+          grabOsc.stop(now + 0.45);
+
+          const growlOsc = this.ctx.createOscillator();
+          const growlFilter = this.ctx.createBiquadFilter();
+          const growlGain = this.ctx.createGain();
+          growlOsc.type = 'sawtooth';
+          growlOsc.frequency.setValueAtTime(68, now + 0.05);
+          growlOsc.frequency.linearRampToValueAtTime(46, now + 0.75);
+          growlFilter.type = 'lowpass';
+          growlFilter.frequency.setValueAtTime(280, now + 0.05);
+          growlGain.gain.setValueAtTime(0.22, now + 0.05);
+          growlGain.gain.exponentialRampToValueAtTime(0.001, now + 0.78);
+          growlOsc.connect(growlFilter);
+          growlFilter.connect(growlGain);
+          growlGain.connect(this.ctx.destination);
+          growlOsc.start(now + 0.05);
+          growlOsc.stop(now + 0.8);
+        }
+
+        playDeathBladeSlash() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+
+          [2650, 3980, 5420].forEach((freq) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now);
+            osc.frequency.exponentialRampToValueAtTime(freq * 0.72, now + 0.28);
+            gain.gain.setValueAtTime(0.075, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.32);
+          });
+
+          const len = Math.floor(this.ctx.sampleRate * 0.35);
+          const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+          const ch = buf.getChannelData(0);
+          for (let i = 0; i < len; i++) {
+            ch[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.09));
+          }
+          const src = this.ctx.createBufferSource();
+          src.buffer = buf;
+          const bandpass = this.ctx.createBiquadFilter();
+          bandpass.type = 'bandpass';
+          bandpass.frequency.setValueAtTime(950, now);
+          bandpass.Q.setValueAtTime(1.2, now);
+          const wetGain = this.ctx.createGain();
+          wetGain.gain.setValueAtTime(0.32, now);
+          wetGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+          src.connect(bandpass);
+          bandpass.connect(wetGain);
+          wetGain.connect(this.ctx.destination);
+          src.start(now);
+
+          const punch = this.ctx.createOscillator();
+          const punchGain = this.ctx.createGain();
+          punch.type = 'triangle';
+          punch.frequency.setValueAtTime(135, now);
+          punch.frequency.exponentialRampToValueAtTime(26, now + 0.32);
+          punchGain.gain.setValueAtTime(0.35, now);
+          punchGain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+          punch.connect(punchGain);
+          punchGain.connect(this.ctx.destination);
+          punch.start(now);
+          punch.stop(now + 0.35);
+        }
+
+        playDyingAudioSequence() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+
+          const tinnitus = this.ctx.createOscillator();
+          const tinGain = this.ctx.createGain();
+          tinnitus.type = 'sine';
+          tinnitus.frequency.setValueAtTime(3150, now);
+          tinnitus.frequency.linearRampToValueAtTime(2850, now + 1.5);
+          tinGain.gain.setValueAtTime(0.001, now);
+          tinGain.gain.linearRampToValueAtTime(0.065, now + 0.25);
+          tinGain.gain.exponentialRampToValueAtTime(0.001, now + 1.55);
+          tinnitus.connect(tinGain);
+          tinGain.connect(this.ctx.destination);
+          tinnitus.start(now);
+          tinnitus.stop(now + 1.6);
+
+          const beatOffsets = [0.1, 0.26, 0.72, 0.92];
+          beatOffsets.forEach((offset, idx) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            const isLub = idx % 2 === 0;
+            osc.frequency.setValueAtTime(isLub ? 62 : 46, now + offset);
+            osc.frequency.exponentialRampToValueAtTime(24, now + offset + 0.16);
+            const vol = idx < 2 ? 0.22 : 0.12;
+            gain.gain.setValueAtTime(vol, now + offset);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.18);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.2);
+          });
+
+          const gaspLen = Math.floor(this.ctx.sampleRate * 0.55);
+          const gaspBuf = this.ctx.createBuffer(1, gaspLen, this.ctx.sampleRate);
+          const gaspData = gaspBuf.getChannelData(0);
+          for (let i = 0; i < gaspLen; i++) {
+            const env = Math.sin((i / gaspLen) * Math.PI);
+            gaspData[i] = (Math.random() * 2 - 1) * env;
+          }
+          const gaspSrc = this.ctx.createBufferSource();
+          gaspSrc.buffer = gaspBuf;
+          const gaspFilter = this.ctx.createBiquadFilter();
+          gaspFilter.type = 'bandpass';
+          gaspFilter.frequency.setValueAtTime(620, now + 0.15);
+          gaspFilter.Q.setValueAtTime(2.4, now + 0.15);
+          const gaspGain = this.ctx.createGain();
+          gaspGain.gain.setValueAtTime(0.11, now + 0.15);
+          gaspGain.gain.setValueAtTime(0.001, now + 0.68);
+          gaspSrc.connect(gaspFilter);
+          gaspFilter.connect(gaspGain);
+          gaspGain.connect(this.ctx.destination);
+          gaspSrc.start(now + 0.15);
+
+          const sub = this.ctx.createOscillator();
+          const subGain = this.ctx.createGain();
+          sub.type = 'sine';
+          sub.frequency.setValueAtTime(48, now + 0.4);
+          sub.frequency.linearRampToValueAtTime(34, now + 1.65);
+          subGain.gain.setValueAtTime(0.001, now + 0.4);
+          subGain.gain.linearRampToValueAtTime(0.16, now + 0.8);
+          subGain.gain.exponentialRampToValueAtTime(0.001, now + 1.65);
+          sub.connect(subGain);
+          subGain.connect(this.ctx.destination);
+          sub.start(now + 0.4);
+          sub.stop(now + 1.68);
+        }
+
+        speakHenriDeathLine(charShortName) {
+          if (!this.enabled) return;
+          try {
+            if ('speechSynthesis' in window) {
+              window.speechSynthesis.cancel();
+              const utter = new SpeechSynthesisUtterance(
+                `Henri bilang: Udah ${charShortName} mati... sekarang ibunya...`
+              );
+              utter.lang = 'id-ID';
+              utter.pitch = 0.32;
+              utter.rate = 0.78;
+              utter.volume = 1.0;
+              window.speechSynthesis.speak(utter);
+            }
+          } catch (e) {}
+        }
+
+        playSunriseChime() {
+          if (!this.enabled) return;
+          this.ensureContext();
+          if (!this.ctx) return;
+          const now = this.ctx.currentTime;
+          [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, now + i * 0.18);
+            gain.gain.setValueAtTime(0.001, now + i * 0.18);
+            gain.gain.linearRampToValueAtTime(0.11, now + i * 0.18 + 0.08);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.18 + 1.4);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now + i * 0.18);
+            osc.stop(now + i * 0.18 + 1.45);
+          });
+        }
+      }
+
+      const audio = new ProceduralAudio();
+
+      /* ==========================================================
+         2. PROCEDURAL 3D CANVAS TEXTURE GENERATORS
+      ========================================================== */
+      function createWoodFloorTexture() {
+        const c = document.createElement('canvas');
+        c.width = 256;
+        c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#3b2618';
+        g.fillRect(0, 0, 256, 256);
+
+        const plankH = 32;
+        for (let y = 0; y < 256; y += plankH) {
+          g.fillStyle = (y / plankH) % 2 === 0 ? '#422b1b' : '#362215';
+          g.fillRect(0, y, 256, plankH - 2);
+          g.fillStyle = '#1f130b';
+          g.fillRect(0, y + plankH - 2, 256, 2);
+
+          g.strokeStyle = 'rgba(20, 10, 4, 0.35)';
+          g.lineWidth = 1;
+          for (let i = 0; i < 4; i++) {
+            g.beginPath();
+            g.moveTo(0, y + 6 + i * 6);
+            g.bezierCurveTo(85, y + 4 + i * 6, 170, y + 9 + i * 6, 256, y + 6 + i * 6);
+            g.stroke();
+          }
+        }
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(14, 10);
+        return tex;
+      }
+
+      function createWallpaperTexture() {
+        const c = document.createElement('canvas');
+        c.width = 256;
+        c.height = 256;
+        const g = c.getContext('2d');
+        g.fillStyle = '#25262e';
+        g.fillRect(0, 0, 256, 256);
+
+        for (let x = 0; x < 256; x += 32) {
+          g.fillStyle = 'rgba(255, 255, 255, 0.035)';
+          g.fillRect(x, 0, 12, 256);
+        }
+        g.fillStyle = '#241811';
+        g.fillRect(0, 196, 256, 60);
+        g.fillStyle = '#140c08';
+        g.fillRect(0, 192, 256, 4);
+
+        const tex = new THREE.CanvasTexture(c);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        return tex;
+      }
+
+      function createDoorTexture(isExit = false) {
+        const c = document.createElement('canvas');
+        c.width = 256;
+        c.height = 512;
+        const g = c.getContext('2d');
+        g.fillStyle = isExit ? '#4a1d1d' : '#4a2e1b';
+        g.fillRect(0, 0, 256, 512);
+
+        g.strokeStyle = isExit ? '#2b0e0e' : '#29180d';
+        g.lineWidth = 8;
+        g.strokeRect(26, 32, 204, 190);
+        g.strokeRect(26, 265, 204, 210);
+
+        g.fillStyle = '#fbbf24';
+        g.beginPath();
+        g.arc(212, 258, 12, 0, Math.PI * 2);
+        g.fill();
+
+        return new THREE.CanvasTexture(c);
+      }
+
+      /* ==========================================================
+         3. THREE.JS SCENE, RENDERER, LIGHTING & HOUSE BUILDER
+      ========================================================== */
+      const canvas = document.getElementById('threeCanvas');
+      const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x06070c);
+      scene.fog = new THREE.FogExp2(0x06070c, 0.052);
+
+      const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.1, 85);
+      scene.add(camera);
+
+      window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      });
+
+      const flashlight = new THREE.SpotLight(0xfff4dc, 2.6, 24, Math.PI / 5.2, 0.48, 1.15);
+      flashlight.position.set(0.15, -0.1, 0);
+      flashlight.target.position.set(0.15, -0.1, -6);
+      flashlight.castShadow = false;
+      camera.add(flashlight);
+      camera.add(flashlight.target);
+
+      const ambientLight = new THREE.AmbientLight(0x283548, 0.62);
+      scene.add(ambientLight);
+
+      const hallBulbLight = new THREE.PointLight(0xffb74d, 1.15, 16, 1.6);
+      hallBulbLight.position.set(16.8, 3.05, 16.8);
+      scene.add(hallBulbLight);
+
+      const moonLightBedroom = new THREE.PointLight(0x60a5fa, 0.95, 14, 1.5);
+      moonLightBedroom.position.set(6.0, 2.5, 5.5);
+      scene.add(moonLightBedroom);
+
+      const moonLightLiving = new THREE.PointLight(0x60a5fa, 0.85, 15, 1.5);
+      moonLightLiving.position.set(26.0, 2.5, 26.0);
+      scene.add(moonLightLiving);
+
+      const sunLight = new THREE.DirectionalLight(0xfffbeb, 0);
+      sunLight.position.set(22, 18, 14);
+      scene.add(sunLight);
+
+      const CELL = 2.4;
+      const WALL_H = 3.5;
+      const COLS = 18;
+      const ROWS = 14;
+
+      const MAP = [
+        [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+        [1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+        [1,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,1,1]
+      ];
+
+      const woodFloorTex = createWoodFloorTexture();
+      const wallpaperTex = createWallpaperTexture();
+      const doorTex = createDoorTexture(false);
+      const exitDoorTex = createDoorTexture(true);
+
+      const wallMat = new THREE.MeshStandardMaterial({ map: wallpaperTex, roughness: 0.85, metalness: 0.05 });
+      const floorMat = new THREE.MeshStandardMaterial({ map: woodFloorTex, roughness: 0.78, metalness: 0.08 });
+      const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x16171d, roughness: 0.92 });
+      const woodFurnitureMat = new THREE.MeshStandardMaterial({ color: 0x3a2314, roughness: 0.7 });
+      const darkFabricMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.9 });
+
+      const colliders = [];
+      const exitDoorZones = [];
+
+      function addCollider(cx, cz, width, depth, isExitDoor = false) {
+        colliders.push({
+          minX: cx - width / 2,
+          maxX: cx + width / 2,
+          minZ: cz - depth / 2,
+          maxZ: cz + depth / 2,
+          isExitDoor
+        });
+      }
+
+      const houseW = COLS * CELL;
+      const houseD = ROWS * CELL;
+      const floorMesh = new THREE.Mesh(new THREE.PlaneGeometry(houseW, houseD), floorMat);
+      floorMesh.rotation.x = -Math.PI / 2;
+      floorMesh.position.set(houseW / 2, 0, houseD / 2);
+      floorMesh.receiveShadow = true;
+      scene.add(floorMesh);
+
+      const ceilingMesh = new THREE.Mesh(new THREE.PlaneGeometry(houseW, houseD), ceilingMat);
+      ceilingMesh.rotation.x = Math.PI / 2;
+      ceilingMesh.position.set(houseW / 2, WALL_H, houseD / 2);
+      scene.add(ceilingMesh);
+
+      function setNightAtmosphere() {
+        scene.background.setHex(0x06070c);
+        scene.fog.color.setHex(0x06070c);
+        scene.fog.density = 0.052;
+        ambientLight.color.setHex(0x283548);
+        ambientLight.intensity = 0.62;
+        hallBulbLight.intensity = 1.15;
+        moonLightBedroom.intensity = 0.95;
+        moonLightLiving.intensity = 0.85;
+        sunLight.intensity = 0;
+        ceilingMesh.visible = true;
+      }
+
+      const exitDoorMeshes = [];
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cell = MAP[r][c];
+          const wx = (c + 0.5) * CELL;
+          const wz = (r + 0.5) * CELL;
+
+          if (cell === 1) {
+            const wall = new THREE.Mesh(new THREE.BoxGeometry(CELL, WALL_H, CELL), wallMat);
+            wall.position.set(wx, WALL_H / 2, wz);
+            scene.add(wall);
+            addCollider(wx, wz, CELL, CELL, false);
+          } else if (cell === 2) {
+            const exitDoorMat = new THREE.MeshStandardMaterial({
+              map: exitDoorTex,
+              emissive: 0x3b0707,
+              emissiveIntensity: 0.45,
+              roughness: 0.6
+            });
+            const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(CELL, WALL_H * 0.88, 0.35), exitDoorMat);
+            doorMesh.position.set(wx, (WALL_H * 0.88) / 2, wz);
+            scene.add(doorMesh);
+            exitDoorMeshes.push(doorMesh);
+            exitDoorZones.push(new THREE.Vector3(wx, 1.5, wz));
+            addCollider(wx, wz, CELL, 0.6, true);
+          }
+        }
+      }
+
+      // Bedroom Door
+      let bedroomDoorTargetAngle = 0;
+      const bedroomDoorPivot = new THREE.Group();
+      bedroomDoorPivot.position.set(6 * CELL + 0.15, 0, 3 * CELL);
+      const bedroomDoorLeaf = new THREE.Mesh(
+        new THREE.BoxGeometry(0.14, WALL_H * 0.85, CELL * 0.96),
+        new THREE.MeshStandardMaterial({ map: doorTex, roughness: 0.65 })
+      );
+      bedroomDoorLeaf.position.set(0, (WALL_H * 0.85) / 2, CELL * 0.48);
+      bedroomDoorPivot.add(bedroomDoorLeaf);
+      scene.add(bedroomDoorPivot);
+
+      function addMoonWindow(x, y, z, rotY = 0) {
+        const winGroup = new THREE.Group();
+        winGroup.position.set(x, y, z);
+        winGroup.rotation.y = rotY;
+        const pane = new THREE.Mesh(
+          new THREE.PlaneGeometry(2.2, 1.5),
+          new THREE.MeshBasicMaterial({ color: 0x93c5fd })
+        );
+        winGroup.add(pane);
+        const barV = new THREE.Mesh(new THREE.BoxGeometry(0.08, 1.55, 0.08), woodFurnitureMat);
+        const barH = new THREE.Mesh(new THREE.BoxGeometry(2.25, 0.08, 0.08), woodFurnitureMat);
+        winGroup.add(barV, barH);
+        scene.add(winGroup);
+      }
+      addMoonWindow(3.5 * CELL, 2.0, 1.02 * CELL, 0);
+      addMoonWindow(14.0 * CELL, 2.0, 1.02 * CELL, 0);
+      addMoonWindow(16.98 * CELL, 2.0, 10.5 * CELL, -Math.PI / 2);
+
+      function addBoxFurniture(x, y, z, w, h, d, mat, addCollision = true) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        mesh.position.set(x, y, z);
+        scene.add(mesh);
+        if (addCollision) addCollider(x, z, w, d, false);
+        return mesh;
+      }
+
+      // Bedroom Furniture
+      const bedX = 2.3 * CELL;
+      const bedZ = 2.2 * CELL;
+      addBoxFurniture(bedX, 0.28, bedZ, 2.1, 0.56, 3.0, woodFurnitureMat, true);
+      addBoxFurniture(bedX, 0.62, bedZ + 0.1, 1.95, 0.22, 2.75, new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.9 }), false);
+      addBoxFurniture(bedX, 0.72, bedZ - 1.05, 1.35, 0.18, 0.55, new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.8 }), false);
+      addBoxFurniture(bedX + 1.55, 0.35, bedZ - 1.0, 0.7, 0.7, 0.7, woodFurnitureMat, true);
+
+      // Kitchen Furniture
+      addBoxFurniture(14.2 * CELL, 0.48, 1.55 * CELL, 4.4, 0.96, 1.0, new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 }), true);
+      addBoxFurniture(13.8 * CELL, 0.42, 4.1 * CELL, 2.2, 0.84, 1.3, woodFurnitureMat, true);
+
+      // Study/Storage Furniture
+      addBoxFurniture(2.4 * CELL, 0.42, 8.2 * CELL, 2.2, 0.84, 1.1, woodFurnitureMat, true);
+      addBoxFurniture(2.2 * CELL, 0.55, 11.4 * CELL, 1.4, 1.1, 1.4, new THREE.MeshStandardMaterial({ color: 0x452c1e, roughness: 0.85 }), true);
+
+      // Living Room Furniture
+      addBoxFurniture(14.8 * CELL, 0.45, 9.6 * CELL, 1.2, 0.9, 3.2, darkFabricMat, true);
+      addBoxFurniture(12.8 * CELL, 0.26, 9.6 * CELL, 1.1, 0.52, 2.0, woodFurnitureMat, true);
+
+      /* ==========================================================
+         4. 3D HIDING WARDROBES (LEMARI PERSEMBUNYIAN WITH SLATS)
+      ========================================================== */
+      const wardrobes = [];
+
+      function createHidingWardrobe(id, x, z, rotY) {
+        const group = new THREE.Group();
+        group.position.set(x, 0, z);
+        group.rotation.y = rotY;
+
+        const w = 1.45;
+        const h = 2.45;
+        const d = 1.05;
+        const t = 0.08;
+
+        const back = new THREE.Mesh(new THREE.BoxGeometry(w, h, t), woodFurnitureMat);
+        back.position.set(0, h / 2, -d / 2 + t / 2);
+
+        const left = new THREE.Mesh(new THREE.BoxGeometry(t, h, d), woodFurnitureMat);
+        left.position.set(-w / 2 + t / 2, h / 2, 0);
+
+        const right = new THREE.Mesh(new THREE.BoxGeometry(t, h, d), woodFurnitureMat);
+        right.position.set(w / 2 - t / 2, h / 2, 0);
+
+        const top = new THREE.Mesh(new THREE.BoxGeometry(w, t, d), woodFurnitureMat);
+        top.position.set(0, h - t / 2, 0);
+
+        group.add(back, left, right, top);
+
+        const doorGroup = new THREE.Group();
+        const doorFrameL = new THREE.Mesh(new THREE.BoxGeometry(0.12, h, t), woodFurnitureMat);
+        doorFrameL.position.set(-w / 2 + 0.12, h / 2, d / 2 - t / 2);
+        const doorFrameR = new THREE.Mesh(new THREE.BoxGeometry(0.12, h, t), woodFurnitureMat);
+        doorFrameR.position.set(w / 2 - 0.12, h / 2, d / 2 - t / 2);
+        const doorCenter = new THREE.Mesh(new THREE.BoxGeometry(0.08, h, t), woodFurnitureMat);
+        doorCenter.position.set(0, h / 2, d / 2 - t / 2);
+        doorGroup.add(doorFrameL, doorFrameR, doorCenter);
+
+        for (let sy = 0.22; sy < h - 0.15; sy += 0.17) {
+          const slat = new THREE.Mesh(new THREE.BoxGeometry(w - 0.24, 0.085, 0.04), woodFurnitureMat);
+          slat.position.set(0, sy, d / 2 - t / 2);
+          doorGroup.add(slat);
+        }
+        group.add(doorGroup);
+
+        scene.add(group);
+
+        const forward = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), rotY);
+        const exitPos = new THREE.Vector3(x, 1.65, z).addScaledVector(forward, 1.35);
+        const insidePos = new THREE.Vector3(x, 1.55, z);
+
+        wardrobes.push({
+          id,
+          group,
+          doorGroup,
+          insidePos,
+          exitPos,
+          facingYaw: rotY
+        });
+      }
+
+      createHidingWardrobe('lemari_kamar', 5.2 * CELL, 1.65 * CELL, 0);
+      createHidingWardrobe('lemari_dapur', 11.8 * CELL, 1.65 * CELL, 0);
+      createHidingWardrobe('lemari_kerja', 1.65 * CELL, 10.2 * CELL, Math.PI / 2);
+      createHidingWardrobe('lemari_tamu', 16.25 * CELL, 11.4 * CELL, -Math.PI / 2);
+
+      /* ==========================================================
+         5. ARTICULATED 3D CHARACTER & HENRI MODELS
+      ========================================================== */
+      function buildHumanModel({ shirtColor, pantsColor, hairColor, skinColor, isLongHair = false, isTall = false, isMonsterHenri = false }) {
+        const root = new THREE.Group();
+        const scaleY = isTall ? 1.16 : 1.0;
+
+        const skinMat = isMonsterHenri
+          ? new THREE.MeshStandardMaterial({ color: 0x050507, roughness: 0.48, metalness: 0.12 })
+          : new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.72 });
+        const shirtMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.8 });
+        const pantsMat = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.85 });
+        const hairMat = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.9 });
+
+        const leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.82 * scaleY, 0.2), pantsMat);
+        leftLeg.position.set(-0.13, 0.41 * scaleY, 0);
+        const rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.82 * scaleY, 0.2), pantsMat);
+        rightLeg.position.set(0.13, 0.41 * scaleY, 0);
+        root.add(leftLeg, rightLeg);
+
+        const torsoH = (isTall ? 0.95 : 0.72) * scaleY;
+        const torso = new THREE.Mesh(new THREE.BoxGeometry(0.48, torsoH, 0.26), shirtMat);
+        torso.position.set(0, 0.82 * scaleY + torsoH / 2 - 0.1, 0);
+        root.add(torso);
+
+        const leftArmPivot = new THREE.Group();
+        leftArmPivot.position.set(-0.32, 0.82 * scaleY + torsoH - 0.16, 0);
+        const leftArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.68 * scaleY, 0.15), shirtMat);
+        leftArmMesh.position.set(0, -0.3 * scaleY, 0);
+        leftArmPivot.add(leftArmMesh);
+
+        const rightArmPivot = new THREE.Group();
+        rightArmPivot.position.set(0.32, 0.82 * scaleY + torsoH - 0.16, 0);
+        const rightArmMesh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.68 * scaleY, 0.15), shirtMat);
+        rightArmMesh.position.set(0, -0.3 * scaleY, 0);
+        rightArmPivot.add(rightArmMesh);
+        root.add(leftArmPivot, rightArmPivot);
+
+        const headY = 0.82 * scaleY + torsoH + 0.12;
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.36, 0.34), skinMat);
+        head.position.set(0, headY, 0);
+        root.add(head);
+
+        const hairTop = new THREE.Mesh(new THREE.BoxGeometry(0.37, 0.14, 0.37), hairMat);
+        hairTop.position.set(0, headY + 0.15, -0.01);
+        root.add(hairTop);
+
+        if (isLongHair) {
+          const backHair = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.56, 0.14), hairMat);
+          backHair.position.set(0, headY - 0.14, -0.16);
+          root.add(backHair);
+        }
+
+        const eyeMat = isMonsterHenri
+          ? new THREE.MeshBasicMaterial({ color: 0xff0000 })
+          : new THREE.MeshBasicMaterial({ color: 0x111827 });
+
+        const eyeL = new THREE.Mesh(
+          new THREE.BoxGeometry(isMonsterHenri ? 0.082 : 0.065, isMonsterHenri ? 0.048 : 0.04, 0.035),
+          eyeMat
+        );
+        eyeL.position.set(-0.082, headY + 0.025, 0.176);
+        const eyeR = new THREE.Mesh(
+          new THREE.BoxGeometry(isMonsterHenri ? 0.082 : 0.065, isMonsterHenri ? 0.048 : 0.04, 0.035),
+          eyeMat
+        );
+        eyeR.position.set(0.082, headY + 0.025, 0.176);
+        root.add(eyeL, eyeR);
+
+        let eyeGlowLight = null;
+        let sinisterMouth = null;
+        let butcherKnife = null;
+
+        if (isMonsterHenri) {
+          const pupilMat = new THREE.MeshBasicMaterial({ color: 0xffb4b4 });
+          const pupilL = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.04), pupilMat);
+          pupilL.position.set(-0.082, headY + 0.025, 0.179);
+          const pupilR = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.04), pupilMat);
+          pupilR.position.set(0.082, headY + 0.025, 0.179);
+          root.add(pupilL, pupilR);
+
+          eyeGlowLight = new THREE.PointLight(0xff0000, 1.5, 5.2);
+          eyeGlowLight.position.set(0, headY + 0.03, 0.38);
+          root.add(eyeGlowLight);
+
+          sinisterMouth = new THREE.Group();
+          sinisterMouth.position.set(0, headY - 0.092, 0.175);
+
+          const mouthCavity = new THREE.Mesh(
+            new THREE.BoxGeometry(0.22, 0.075, 0.03),
+            new THREE.MeshBasicMaterial({ color: 0x1a0000 })
+          );
+          sinisterMouth.add(mouthCavity);
+
+          const toothBoneMat = new THREE.MeshStandardMaterial({
+            color: 0xf3f4f6,
+            emissive: 0x3f0d0d,
+            emissiveIntensity: 0.25,
+            roughness: 0.3
+          });
+          const toothBloodTipMat = new THREE.MeshStandardMaterial({
+            color: 0xb91c1c,
+            emissive: 0x7f1d1d,
+            emissiveIntensity: 0.45,
+            roughness: 0.2
+          });
+
+          const toothOffsetsX = [-0.085, -0.056, -0.028, 0, 0.028, 0.056, 0.085];
+          toothOffsetsX.forEach((tx, idx) => {
+            const isCanine = idx === 1 || idx === 5;
+            const fangLen = isCanine ? 0.058 : 0.038;
+            const fangRad = isCanine ? 0.013 : 0.010;
+
+            const upperTooth = new THREE.Mesh(new THREE.ConeGeometry(fangRad, fangLen, 5), toothBoneMat);
+            upperTooth.rotation.x = Math.PI;
+            upperTooth.position.set(tx, 0.032 - fangLen * 0.45, 0.014);
+            sinisterMouth.add(upperTooth);
+
+            const upperTip = new THREE.Mesh(new THREE.ConeGeometry(fangRad * 0.65, fangLen * 0.45, 5), toothBloodTipMat);
+            upperTip.rotation.x = Math.PI;
+            upperTip.position.set(tx, 0.032 - fangLen * 0.72, 0.015);
+            sinisterMouth.add(upperTip);
+
+            const lowerTooth = new THREE.Mesh(new THREE.ConeGeometry(fangRad, fangLen * 0.92, 5), toothBoneMat);
+            lowerTooth.position.set(tx, -0.032 + fangLen * 0.42, 0.014);
+            sinisterMouth.add(lowerTooth);
+          });
+
+          sinisterMouth.scale.set(0.85, 0.75, 1);
+          root.add(sinisterMouth);
+
+          const clawBaseMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.35, metalness: 0.4 });
+          const clawBloodMat = new THREE.MeshStandardMaterial({
+            color: 0xb91c1c,
+            emissive: 0x7f1d1d,
+            emissiveIntensity: 0.55,
+            roughness: 0.15,
+            metalness: 0.2
+          });
+
+          [-0.052, -0.018, 0.018, 0.052].forEach((offsetX) => {
+            const clawL = new THREE.Mesh(new THREE.ConeGeometry(0.017, 0.19, 5), clawBaseMat);
+            clawL.rotation.x = Math.PI;
+            clawL.position.set(offsetX, -0.68 * scaleY, 0.04);
+            leftArmPivot.add(clawL);
+
+            const bloodTipL = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.115, 5), clawBloodMat);
+            bloodTipL.rotation.x = Math.PI;
+            bloodTipL.position.set(offsetX, -0.73 * scaleY, 0.042);
+            leftArmPivot.add(bloodTipL);
+
+            const clawR = new THREE.Mesh(new THREE.ConeGeometry(0.017, 0.19, 5), clawBaseMat);
+            clawR.rotation.x = Math.PI;
+            clawR.position.set(offsetX, -0.68 * scaleY, 0.04);
+            rightArmPivot.add(clawR);
+
+            const bloodTipR = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.115, 5), clawBloodMat);
+            bloodTipR.rotation.x = Math.PI;
+            bloodTipR.position.set(offsetX, -0.73 * scaleY, 0.042);
+            rightArmPivot.add(bloodTipR);
+          });
+
+          const handBloodL = new THREE.Mesh(new THREE.BoxGeometry(0.148, 0.12, 0.158), clawBloodMat);
+          handBloodL.position.set(0, -0.58 * scaleY, 0);
+          leftArmPivot.add(handBloodL);
+
+          const handBloodR = new THREE.Mesh(new THREE.BoxGeometry(0.148, 0.12, 0.158), clawBloodMat);
+          handBloodR.position.set(0, -0.58 * scaleY, 0);
+          rightArmPivot.add(handBloodR);
+
+          butcherKnife = new THREE.Group();
+          butcherKnife.position.set(0, -0.62 * scaleY, 0.08);
+          butcherKnife.rotation.x = Math.PI / 2;
+
+          const handle = new THREE.Mesh(
+            new THREE.BoxGeometry(0.035, 0.14, 0.045),
+            new THREE.MeshStandardMaterial({ color: 0x1c1917, roughness: 0.85 })
+          );
+          const blade = new THREE.Mesh(
+            new THREE.BoxGeometry(0.012, 0.34, 0.075),
+            new THREE.MeshStandardMaterial({
+              color: 0xe2e8f0,
+              emissive: 0x334155,
+              emissiveIntensity: 0.35,
+              metalness: 0.9,
+              roughness: 0.15
+            })
+          );
+          blade.position.set(0, 0.23, 0.01);
+
+          const bloodEdge = new THREE.Mesh(
+            new THREE.BoxGeometry(0.015, 0.21, 0.045),
+            new THREE.MeshStandardMaterial({
+              color: 0x991b1b,
+              emissive: 0x7f1d1d,
+              emissiveIntensity: 0.5,
+              roughness: 0.25
+            })
+          );
+          bloodEdge.position.set(0, 0.29, 0.025);
+
+          butcherKnife.add(handle, blade, bloodEdge);
+          butcherKnife.visible = false;
+          rightArmPivot.add(butcherKnife);
+        } else {
+          const smile = new THREE.Mesh(
+            new THREE.BoxGeometry(0.12, 0.025, 0.02),
+            new THREE.MeshBasicMaterial({ color: 0x9a3412 })
+          );
+          smile.position.set(0, headY - 0.09, 0.175);
+          root.add(smile);
+        }
+
+        return {
+          root,
+          leftLeg,
+          rightLeg,
+          leftArmPivot,
+          rightArmPivot,
+          eyeGlowLight,
+          sinisterMouth,
+          butcherKnife
+        };
+      }
+
+      const rinaPreview = buildHumanModel({
+        shirtColor: 0xe11d48,
+        pantsColor: 0x1e293b,
+        hairColor: 0x18181b,
+        skinColor: 0xfbd3b6,
+        isLongHair: true
+      });
+      rinaPreview.root.position.set(3.2 * CELL, 0, 3.6 * CELL);
+      rinaPreview.root.rotation.y = 0.35;
+      scene.add(rinaPreview.root);
+
+      const rakaPreview = buildHumanModel({
+        shirtColor: 0x2563eb,
+        pantsColor: 0x0f172a,
+        hairColor: 0x18181b,
+        skinColor: 0xf3c6a5,
+        isLongHair: false
+      });
+      rakaPreview.root.position.set(4.5 * CELL, 0, 3.6 * CELL);
+      rakaPreview.root.rotation.y = -0.35;
+      scene.add(rakaPreview.root);
+
+      const henriMonster = buildHumanModel({
+        shirtColor: 0x09090d,
+        pantsColor: 0x050507,
+        hairColor: 0x050507,
+        skinColor: 0x050507,
+        isLongHair: false,
+        isTall: true,
+        isMonsterHenri: true
+      });
+      henriMonster.root.visible = false;
+      scene.add(henriMonster.root);
+
+      const henriNormalDay = buildHumanModel({
+        shirtColor: 0x0284c7,
+        pantsColor: 0x334155,
+        hairColor: 0x451a03,
+        skinColor: 0xfbd3b6,
+        isLongHair: false,
+        isTall: true,
+        isMonsterHenri: false
+      });
+      henriNormalDay.root.visible = false;
+      scene.add(henriNormalDay.root);
+
+      /* ==========================================================
+         6. GAME STATE, CHARACTER STATS & UI CONTROLLER
+      ========================================================== */
+      const CHARACTER_STATS = {
+        rina: {
+          shortName: 'Rina',
+          fullName: 'Rina (Perempuan)',
+          walkSpeed: 4.15,
+          sprintSpeed: 6.75,
+          maxStamina: 100,
+          staminaRegen: 25,
+          noiseMult: 0.72,
+          flashlightRange: 22,
+          flashlightAngle: Math.PI / 5.4,
+          flashlightIntensity: 2.5
+        },
+        raka: {
+          shortName: 'Raka',
+          fullName: 'Raka (Laki-laki)',
+          walkSpeed: 3.95,
+          sprintSpeed: 6.5,
+          maxStamina: 130,
+          staminaRegen: 18,
+          noiseMult: 1.0,
+          flashlightRange: 28,
+          flashlightAngle: Math.PI / 4.4,
+          flashlightIntensity: 3.1
+        }
+      };
+
+      const gameState = {
+        mode: 'TITLE',
+        selectedChar: 'rina',
+        night: 1,
+        clockMinutes: 0,
+        keysCollected: 0,
+        totalKeysNeeded: 3,
+        sleepTimer: null,
+        stats: {
+          nightsSlept: 0,
+          nightsEscaped: 0,
+          totalKeysFound: 0
+        }
+      };
+
+      const player = {
+        pos: new THREE.Vector3(bedX, 1.65, bedZ),
+        yaw: 0,
+        pitch: 0,
+        stamina: 100,
+        isHidden: false,
+        currentWardrobe: null,
+        flashlightOn: true,
+        stepTimer: 0,
+        heartbeatTimer: 0,
+        targetSleepY: 1.65,
+        targetSleepPitch: 0
+      };
+
+      const uiSections = {
+        TITLE: document.getElementById('uiTitle'),
+        BEDROOM: document.getElementById('uiBedroom'),
+        SLEEP_CUTSCENE: document.getElementById('uiSleepCutscene'),
+        STEALTH: document.getElementById('uiStealthHUD'),
+        NIGHT_SURVIVED: document.getElementById('uiNightSurvived'),
+        JUMPSCARE: document.getElementById('uiGameOver'),
+        VICTORY: document.getElementById('uiVictory')
+      };
+
+      function setUIMode(mode) {
+        gameState.mode = mode;
+        Object.entries(uiSections).forEach(([key, el]) => {
+          if (!el) return;
+          if (key === mode) {
+            el.classList.remove('hidden');
+          } else {
+            el.classList.add('hidden');
+          }
+        });
+      }
+
+      function formatNightClock(totalMins) {
+        const mins = Math.min(360, Math.floor(totalMins));
+        const hh = String(Math.floor(mins / 60)).padStart(2, '0');
+        const mm = String(mins % 60).padStart(2, '0');
+        return `${hh}:${mm}`;
+      }
+
+      /* ==========================================================
+         7. 2D BLOOD SPLATTER & DRIPPING STREAKS OVERLAY
+      ========================================================== */
+      const bloodCanvas = document.getElementById('bloodOverlayCanvas');
+      const bloodCtx = bloodCanvas.getContext('2d');
+      let bloodSplatters = [];
+
+      function resizeBloodCanvas() {
+        bloodCanvas.width = window.innerWidth;
+        bloodCanvas.height = window.innerHeight;
+      }
+      resizeBloodCanvas();
+      window.addEventListener('resize', resizeBloodCanvas);
+
+      function clearBloodOverlay() {
+        bloodSplatters = [];
+        bloodCanvas.classList.add('hidden');
+        bloodCtx.clearRect(0, 0, bloodCanvas.width, bloodCanvas.height);
+      }
+
+      function spawnBloodImpact(nx = 0.5, ny = 0.5, scale = 1.0) {
+        bloodCanvas.classList.remove('hidden');
+        const cx = nx * bloodCanvas.width;
+        const cy = ny * bloodCanvas.height;
+        const count = Math.floor(38 * scale);
+
+        for (let i = 0; i < count; i++) {
+          const angle = Math.random() * Math.PI * 2;
+          const dist = Math.pow(Math.random(), 0.7) * 260 * scale;
+          const x = cx + Math.cos(angle) * dist;
+          const y = cy + Math.sin(angle) * dist;
+          const radius = (4 + Math.random() * 24) * scale * (1 - dist / (340 * scale));
+          bloodSplatters.push({
+            x,
+            y,
+            radius: Math.max(3, radius),
+            dripSpeed: 12 + Math.random() * 48,
+            dripLength: 0,
+            maxDrip: 40 + Math.random() * 190,
+            alpha: 0.72 + Math.random() * 0.25
+          });
+        }
+      }
+
+      function updateAndRenderBloodOverlay(dt) {
+        if (bloodSplatters.length === 0) return;
+        bloodCtx.clearRect(0, 0, bloodCanvas.width, bloodCanvas.height);
+
+        for (let i = 0; i < bloodSplatters.length; i++) {
+          const b = bloodSplatters[i];
+          if (b.dripLength < b.maxDrip) {
+            b.dripLength += b.dripSpeed * dt;
+          }
+
+          bloodCtx.save();
+          bloodCtx.fillStyle = `rgba(136, 8, 8, ${b.alpha})`;
+          bloodCtx.beginPath();
+          bloodCtx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+          bloodCtx.fill();
+
+          if (b.dripLength > 1) {
+            const dripW = Math.max(2, b.radius * 0.34);
+            bloodCtx.beginPath();
+            bloodCtx.moveTo(b.x - dripW, b.y);
+            bloodCtx.lineTo(b.x + dripW, b.y);
+            bloodCtx.lineTo(b.x + dripW * 0.45, b.y + b.dripLength);
+            bloodCtx.arc(b.x, b.y + b.dripLength, dripW * 0.45, 0, Math.PI);
+            bloodCtx.closePath();
+            bloodCtx.fill();
+          }
+          bloodCtx.restore();
+        }
+      }
+
+      /* ==========================================================
+         8. 3D COLLECTIBLE KEYS & INTERACTABLES SYSTEM
+      ========================================================== */
+      const keyItems = [];
+      const KEY_SPAWN_CANDIDATES = [
+        new THREE.Vector3(14.6 * CELL, 1.05, 2.8 * CELL), // Kitchen counter area
+        new THREE.Vector3(2.8 * CELL, 1.05, 9.5 * CELL),  // Study desk area
+        new THREE.Vector3(13.2 * CELL, 1.05, 10.6 * CELL), // Living room table area
+        new THREE.Vector3(8.5 * CELL, 1.05, 1.8 * CELL),  // North central alcove
+        new THREE.Vector3(4.5 * CELL, 1.05, 11.8 * CELL)  // Southwest storage corner
+      ];
+
+      function clearKeys() {
+        while (keyItems.length > 0) {
+          const k = keyItems.pop();
+          scene.remove(k.group);
+        }
+      }
+
+      function spawnKeysForNight(night) {
+        clearKeys();
+        const shifted = [...KEY_SPAWN_CANDIDATES];
+        const offset = (night - 1) % shifted.length;
+        const rotated = shifted.slice(offset).concat(shifted.slice(0, offset));
+        const chosen = rotated.slice(0, 3);
+
+        const goldMat = new THREE.MeshStandardMaterial({
+          color: 0xfbbf24,
+          emissive: 0xd97706,
+          emissiveIntensity: 0.7,
+          metalness: 0.85,
+          roughness: 0.2
+        });
+
+        chosen.forEach((pos, idx) => {
+          const group = new THREE.Group();
+          group.position.copy(pos);
+
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.03, 8, 18), goldMat);
+          const shaft = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.26, 0.03), goldMat);
+          shaft.position.set(0, -0.22, 0);
+          const bit1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.035, 0.03), goldMat);
+          bit1.position.set(0.04, -0.28, 0);
+          const bit2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.035, 0.03), goldMat);
+          bit2.position.set(0.04, -0.34, 0);
+
+          const light = new THREE.PointLight(0xfbbf24, 1.1, 4.2);
+          group.add(ring, shaft, bit1, bit2, light);
+          scene.add(group);
+
+          keyItems.push({
+            id: idx,
+            group,
+            baseY: pos.y,
+            collected: false
+          });
+        });
+      }
+
+      /* ==========================================================
+         9. PLAYER MOVEMENT, COLLISION, INPUTS & STEALTH SUBTITLE
+      ========================================================== */
+      const keysDown = {};
+      const touchMove = { x: 0, y: 0, activeId: null };
+      const touchLook = { activeId: null, lastX: 0, lastY: 0 };
+      let stealthSubtitleTimer = 0;
+
+      function showStealthHenriDialogue(lineText, duration = 3.2) {
+        const box = document.getElementById('stealthHenriSubtitleBox');
+        const textEl = document.getElementById('stealthHenriSubtitleText');
+        if (!box || !textEl) return;
+        textEl.textContent = lineText;
+        box.classList.remove('hidden');
+        stealthSubtitleTimer = duration;
+      }
+
+      function resolveWallCollision(pos, radius = 0.42) {
+        for (let i = 0; i < colliders.length; i++) {
+          const box = colliders[i];
+          const closestX = Math.max(box.minX, Math.min(pos.x, box.maxX));
+          const closestZ = Math.max(box.minZ, Math.min(pos.z, box.maxZ));
+          const dx = pos.x - closestX;
+          const dz = pos.z - closestZ;
+          const distSq = dx * dx + dz * dz;
+
+          if (distSq < radius * radius) {
+            const dist = Math.sqrt(distSq);
+            if (dist > 0.0001) {
+              const overlap = radius - dist;
+              pos.x += (dx / dist) * overlap;
+              pos.z += (dz / dist) * overlap;
+            } else {
+              pos.x += radius;
+            }
+          }
+        }
+      }
+
+      function hasLineOfSight(fromPos, toPos) {
+        const dx = toPos.x - fromPos.x;
+        const dz = toPos.z - fromPos.z;
+        const dist = Math.hypot(dx, dz);
+        const steps = Math.ceil(dist / 0.35);
+        for (let s = 1; s < steps; s++) {
+          const t = s / steps;
+          const sx = fromPos.x + dx * t;
+          const sz = fromPos.z + dz * t;
+          const c = Math.floor(sx / CELL);
+          const r = Math.floor(sz / CELL);
+          if (r < 0 || r >= ROWS || c < 0 || c >= COLS) return false;
+          if (MAP[r][c] === 1 || MAP[r][c] === 2) return false;
+        }
+        return true;
+      }
+
+      function toggleFlashlight() {
+        if (gameState.mode !== 'STEALTH' || player.isHidden) return;
+        player.flashlightOn = !player.flashlightOn;
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+        flashlight.intensity = player.flashlightOn ? cStats.flashlightIntensity : 0;
+        audio.playClick();
+      }
+
+      let activeInteractable = null;
+
+      function updateContextualInteractable() {
+        const promptEl = document.getElementById('interactPrompt');
+        const hudBtn = document.getElementById('btnHudInteract');
+        const hudBtnLabel = document.getElementById('btnHudInteractLabel');
+
+        if (gameState.mode !== 'STEALTH') {
+          activeInteractable = null;
+          promptEl.classList.add('hidden');
+          hudBtn.classList.add('hidden');
+          return;
+        }
+
+        if (player.isHidden && player.currentWardrobe) {
+          activeInteractable = { type: 'EXIT_WARDROBE', target: player.currentWardrobe };
+          promptEl.textContent = '[E] Keluar dari Lemari';
+          promptEl.classList.remove('hidden');
+          hudBtnLabel.textContent = 'Keluar Lemari [E]';
+          hudBtn.classList.remove('hidden');
+          return;
+        }
+
+        // 1. Check nearby uncollected keys
+        for (const k of keyItems) {
+          if (!k.collected && player.pos.distanceTo(k.group.position) < 1.95) {
+            activeInteractable = { type: 'KEY', target: k };
+            promptEl.textContent = '[E] Ambil Kunci Keluar';
+            promptEl.classList.remove('hidden');
+            hudBtnLabel.textContent = 'Ambil Kunci [E]';
+            hudBtn.classList.remove('hidden');
+            return;
+          }
+        }
+
+        // 2. Check nearby exit doors
+        for (const doorPos of exitDoorZones) {
+          if (player.pos.distanceTo(doorPos) < 2.25) {
+            activeInteractable = { type: 'EXIT_DOOR', target: doorPos };
+            const ready = gameState.keysCollected >= gameState.totalKeysNeeded;
+            promptEl.textContent = ready
+              ? '[E] BUKA PINTU KELUAR & KABUR!'
+              : `Pintu Terkunci (${gameState.keysCollected}/${gameState.totalKeysNeeded} Kunci)`;
+            promptEl.classList.remove('hidden');
+            hudBtnLabel.textContent = ready ? 'Buka Pintu Keluar [E]' : `Terkunci (${gameState.keysCollected}/3)`;
+            hudBtn.classList.remove('hidden');
+            return;
+          }
+        }
+
+        // 3. Check nearby hiding wardrobes
+        for (const w of wardrobes) {
+          if (player.pos.distanceTo(w.exitPos) < 1.95 || player.pos.distanceTo(w.insidePos) < 1.95) {
+            activeInteractable = { type: 'ENTER_WARDROBE', target: w };
+            promptEl.textContent = '[E] Sembunyi di Dalam Lemari';
+            promptEl.classList.remove('hidden');
+            hudBtnLabel.textContent = 'Sembunyi [E]';
+            hudBtn.classList.remove('hidden');
+            return;
+          }
+        }
+
+        activeInteractable = null;
+        promptEl.classList.add('hidden');
+        hudBtn.classList.add('hidden');
+      }
+
+      function triggerPlayerInteract() {
+        if (gameState.mode !== 'STEALTH' || !activeInteractable) return;
+
+        if (activeInteractable.type === 'KEY') {
+          const k = activeInteractable.target;
+          if (!k.collected) {
+            k.collected = true;
+            k.group.visible = false;
+            gameState.keysCollected += 1;
+            gameState.stats.totalKeysFound += 1;
+            document.getElementById('hudKeysCount').textContent = `${gameState.keysCollected}/${gameState.totalKeysNeeded}`;
+            audio.playKeyJingle();
+
+            const cStats = CHARACTER_STATS[gameState.selectedChar];
+            if (gameState.keysCollected >= gameState.totalKeysNeeded) {
+              document.getElementById('hudObjectiveText').innerHTML =
+                `Semua <span class="text-amber-300 font-bold">3 Kunci</span> terkumpul! Segera lari ke <span class="text-emerald-400 font-bold">Pintu Keluar Utama</span> di selatan sebelum <span class="text-red-400 font-bold">Henri</span> menangkapmu!`;
+              showStealthHenriDialogue(`Henri: "Jangan harap bisa keluar dengan kunci itu, ${cStats.shortName}!"`, 3.5);
+            } else {
+              showStealthHenriDialogue(`Henri: "Aku mendengar gemerincing kunci... Aku datang, ${cStats.shortName}..."`, 3.0);
+            }
+          }
+        } else if (activeInteractable.type === 'EXIT_DOOR') {
+          if (gameState.keysCollected >= gameState.totalKeysNeeded) {
+            audio.playDoorCreak();
+            completeNightSurvival('kunci');
+          } else {
+            audio.playClick();
+          }
+        } else if (activeInteractable.type === 'ENTER_WARDROBE') {
+          const w = activeInteractable.target;
+          player.isHidden = true;
+          player.currentWardrobe = w;
+          player.pos.copy(w.insidePos);
+          player.yaw = w.facingYaw;
+          player.pitch = 0;
+          flashlight.intensity = 0;
+          audio.playDoorCreak();
+
+          // Check if Henri directly witnessed the player entering the wardrobe!
+          const distToHenri = henriAI.pos.distanceTo(w.exitPos);
+          if (
+            (henriAI.state === 'CHASE' && distToHenri < 11.5) ||
+            (distToHenri < 6.5 && hasLineOfSight(henriAI.pos, w.exitPos))
+          ) {
+            henriAI.sawPlayerHide = true;
+            henriAI.state = 'CHASE';
+            henriAI.targetWardrobe = w;
+            const cStats = CHARACTER_STATS[gameState.selectedChar];
+            showStealthHenriDialogue(`Henri: "Aku melihatmu masuk ke lemari itu, ${cStats.shortName}!"`, 3.5);
+          }
+        } else if (activeInteractable.type === 'EXIT_WARDROBE') {
+          const w = activeInteractable.target;
+          player.isHidden = false;
+          player.currentWardrobe = null;
+          player.pos.copy(w.exitPos);
+          const cStats = CHARACTER_STATS[gameState.selectedChar];
+          flashlight.intensity = player.flashlightOn ? cStats.flashlightIntensity : 0;
+          audio.playDoorCreak();
+        }
+      }
+
+      /* ==========================================================
+         10. HENRI 3D STALKER AI (PATROL, INVESTIGATE, CHASE & BREACH)
+      ========================================================== */
+      const PATROL_WAYPOINTS = [
+        new THREE.Vector3(8.5 * CELL, 0, 3.5 * CELL),
+        new THREE.Vector3(14.0 * CELL, 0, 3.2 * CELL),
+        new THREE.Vector3(8.5 * CELL, 0, 9.5 * CELL),
+        new THREE.Vector3(14.5 * CELL, 0, 11.2 * CELL),
+        new THREE.Vector3(3.5 * CELL, 0, 9.5 * CELL),
+        new THREE.Vector3(4.2 * CELL, 0, 3.5 * CELL)
+      ];
+
+      const henriAI = {
+        state: 'PATROL',
+        pos: new THREE.Vector3(14.0 * CELL, 0, 10.5 * CELL),
+        targetPos: PATROL_WAYPOINTS[0].clone(),
+        waypointIdx: 0,
+        stepTimer: 0,
+        alertTimer: 0,
+        tauntCooldown: 0,
+        sawPlayerHide: false,
+        targetWardrobe: null
+      };
+
+      function resetHenriForStealth(night) {
+        henriMonster.root.visible = true;
+        henriMonster.root.rotation.set(0, 0, 0);
+        if (henriMonster.butcherKnife) henriMonster.butcherKnife.visible = false;
+        if (henriMonster.sinisterMouth) henriMonster.sinisterMouth.scale.set(0.85, 0.75, 1);
+        if (henriMonster.eyeGlowLight) henriMonster.eyeGlowLight.intensity = 1.6;
+
+        henriAI.state = 'PATROL';
+        henriAI.pos.set(14.2 * CELL, 0, 10.8 * CELL);
+        henriAI.waypointIdx = night % PATROL_WAYPOINTS.length;
+        henriAI.targetPos.copy(PATROL_WAYPOINTS[henriAI.waypointIdx]);
+        henriAI.stepTimer = 0;
+        henriAI.alertTimer = 0;
+        henriAI.tauntCooldown = 1.5;
+        henriAI.sawPlayerHide = false;
+        henriAI.targetWardrobe = null;
+        henriMonster.root.position.copy(henriAI.pos);
+      }
+
+      function updateHenriAI(dt, isPlayerSprinting) {
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+        const nightSpeedBonus = (gameState.night - 1) * 0.42;
+        const patrolSpeed = 2.45 + nightSpeedBonus * 0.6;
+        const chaseSpeed = 4.65 + nightSpeedBonus;
+
+        henriAI.tauntCooldown = Math.max(0, henriAI.tauntCooldown - dt);
+
+        // If Henri saw player enter a wardrobe, rush straight to rip it open
+        if (player.isHidden && henriAI.sawPlayerHide && henriAI.targetWardrobe) {
+          const target = henriAI.targetWardrobe.exitPos;
+          const dx = target.x - henriAI.pos.x;
+          const dz = target.z - henriAI.pos.z;
+          const dist = Math.hypot(dx, dz);
+
+          if (dist < 1.15) {
+            audio.playWardrobeRip();
+            player.isHidden = false;
+            player.currentWardrobe = null;
+            player.pos.copy(henriAI.targetWardrobe.exitPos);
+            triggerDeathSequence(true);
+            return;
+          }
+
+          henriAI.pos.x += (dx / dist) * chaseSpeed * dt;
+          henriAI.pos.z += (dz / dist) * chaseSpeed * dt;
+          resolveWallCollision(henriAI.pos, 0.42);
+          henriMonster.root.position.copy(henriAI.pos);
+          henriMonster.root.lookAt(target.x, 0, target.z);
+          return;
+        }
+
+        const distToPlayer = Math.hypot(player.pos.x - henriAI.pos.x, player.pos.z - henriAI.pos.z);
+        const canSeePlayer = !player.isHidden && distToPlayer < (player.flashlightOn ? 15.5 : 10.5) && hasLineOfSight(henriAI.pos, player.pos);
+        const canHearPlayer = !player.isHidden && isPlayerSprinting && distToPlayer < (11.5 * cStats.noiseMult);
+
+        if (canSeePlayer) {
+          if (henriAI.state !== 'CHASE') {
+            audio.playChaseSting();
+            if (henriAI.tauntCooldown <= 0) {
+              showStealthHenriDialogue(`Henri: "Ketemu kamu, ${cStats.shortName}! Jangan lari dari Henri!"`, 3.4);
+              henriAI.tauntCooldown = 7.0;
+            }
+          }
+          henriAI.state = 'CHASE';
+          henriAI.targetPos.copy(player.pos);
+          henriAI.alertTimer = 4.5;
+        } else if (canHearPlayer && henriAI.state !== 'CHASE') {
+          henriAI.state = 'INVESTIGATE';
+          henriAI.targetPos.copy(player.pos);
+          henriAI.alertTimer = 3.5;
+          if (henriAI.tauntCooldown <= 0) {
+            showStealthHenriDialogue(`Henri: "Henri mendengar langkah kakimu, ${cStats.shortName}..."`, 3.0);
+            henriAI.tauntCooldown = 6.5;
+          }
+        }
+
+        // Update HUD status badge & chase vignette
+        const hudStatusEl = document.getElementById('hudHenriStatus');
+        const chaseVigEl = document.getElementById('chaseVignette');
+        if (henriAI.state === 'CHASE') {
+          hudStatusEl.textContent = 'HENRI: MENGEJAR!';
+          hudStatusEl.className = 'text-xs font-extrabold uppercase tracking-wider text-red-500 animate-pulse';
+          chaseVigEl.classList.remove('hidden');
+        } else if (henriAI.state === 'INVESTIGATE') {
+          hudStatusEl.textContent = 'HENRI: MENCARI';
+          hudStatusEl.className = 'text-xs font-extrabold uppercase tracking-wider text-amber-400';
+          chaseVigEl.classList.add('hidden');
+        } else {
+          hudStatusEl.textContent = 'HENRI: PATROLI';
+          hudStatusEl.className = 'text-xs font-extrabold uppercase tracking-wider text-emerald-400';
+          chaseVigEl.classList.add('hidden');
+        }
+
+        // Move Henri toward targetPos
+        const dx = henriAI.targetPos.x - henriAI.pos.x;
+        const dz = henriAI.targetPos.z - henriAI.pos.z;
+        const dist = Math.hypot(dx, dz);
+        const moveSpeed = henriAI.state === 'CHASE' ? chaseSpeed : (henriAI.state === 'INVESTIGATE' ? patrolSpeed * 1.25 : patrolSpeed);
+
+        if (dist > 0.35) {
+          henriAI.pos.x += (dx / dist) * moveSpeed * dt;
+          henriAI.pos.z += (dz / dist) * moveSpeed * dt;
+          resolveWallCollision(henriAI.pos, 0.42);
+          henriMonster.root.position.copy(henriAI.pos);
+          henriMonster.root.lookAt(henriAI.targetPos.x, 0, henriAI.targetPos.z);
+
+          // Walking limb animation & footsteps
+          henriAI.stepTimer += dt * moveSpeed * 2.1;
+          const swing = Math.sin(henriAI.stepTimer) * 0.55;
+          henriMonster.leftLeg.rotation.x = swing;
+          henriMonster.rightLeg.rotation.x = -swing;
+          if (henriAI.state === 'CHASE') {
+            henriMonster.leftArmPivot.rotation.x = -1.35 + swing * 0.25;
+            henriMonster.rightArmPivot.rotation.x = -1.35 - swing * 0.25;
+          } else {
+            henriMonster.leftArmPivot.rotation.x = -swing * 0.35;
+            henriMonster.rightArmPivot.rotation.x = swing * 0.35;
+          }
+
+          if (Math.sin(henriAI.stepTimer) > 0.94 && Math.sin(henriAI.stepTimer - dt * moveSpeed * 2.1) <= 0.94) {
+            audio.playHenriFootstep(distToPlayer);
+          }
+        } else {
+          if (henriAI.state === 'CHASE' || henriAI.state === 'INVESTIGATE') {
+            henriAI.alertTimer -= dt;
+            if (henriAI.alertTimer <= 0) {
+              henriAI.state = 'PATROL';
+              henriAI.waypointIdx = (henriAI.waypointIdx + 1) % PATROL_WAYPOINTS.length;
+              henriAI.targetPos.copy(PATROL_WAYPOINTS[henriAI.waypointIdx]);
+            }
+          } else {
+            henriAI.waypointIdx = (henriAI.waypointIdx + 1) % PATROL_WAYPOINTS.length;
+            henriAI.targetPos.copy(PATROL_WAYPOINTS[henriAI.waypointIdx]);
+          }
+        }
+
+        // Catch check if player is not hidden
+        if (!player.isHidden && distToPlayer < 1.15) {
+          triggerDeathSequence(false);
+        }
+      }
+
+      /* ==========================================================
+         11. MIDNIGHT BEDROOM EVENT, SLEEP CUTSCENE & SURVIVAL
+      ========================================================== */
+      const HENRI_MIDNIGHT_LINES = {
+        1: 'Henri: "Sudah tengah malam... Tidurlah sekarang. Jangan pernah keluar dari kamar ini..."',
+        2: 'Henri: "Malam kedua tiba... Pejamkan matamu dan tidur. Jika kamu berkeliaran, Henri akan menangkapmu..."',
+        3: 'Henri: "Malam terakhir sebelum fajar... Tidurlah dengan tenang, atau hadapi Henri dalam kegelapan..."'
+      };
+
+      function enterBedroomMidnight(night) {
+        if (gameState.sleepTimer) {
+          clearInterval(gameState.sleepTimer);
+          gameState.sleepTimer = null;
+        }
+
+        gameState.night = night;
+        gameState.clockMinutes = 0;
+        gameState.keysCollected = 0;
+
+        clearBloodOverlay();
+        document.getElementById('chaseVignette').classList.add('hidden');
+        document.getElementById('stealthHenriSubtitleBox').classList.add('hidden');
+        document.getElementById('jumpscareSubtitleBox').classList.add('hidden');
+        document.getElementById('eyelidTop').style.height = '0%';
+        document.getElementById('eyelidBottom').style.height = '0%';
+
+        setNightAtmosphere();
+        rinaPreview.root.visible = false;
+        rakaPreview.root.visible = false;
+        henriNormalDay.root.visible = false;
+
+        // Position player sitting up in bed looking toward the bedroom door
+        player.isHidden = false;
+        player.currentWardrobe = null;
+        player.pos.set(bedX, 1.32, bedZ - 0.35);
+        player.yaw = -Math.PI / 2 + 0.14;
+        player.pitch = 0.04;
+        flashlight.intensity = 0;
+
+        // Swing bedroom door open and place Henri in the doorway
+        bedroomDoorTargetAngle = -1.25;
+        audio.playDoorCreak();
+
+        henriMonster.root.visible = true;
+        henriMonster.root.position.set(6.05 * CELL, 0, 3.45 * CELL);
+        henriMonster.root.lookAt(player.pos.x, 0, player.pos.z);
+        henriMonster.leftLeg.rotation.x = 0;
+        henriMonster.rightLeg.rotation.x = 0;
+        henriMonster.leftArmPivot.rotation.set(0, 0, 0);
+        henriMonster.rightArmPivot.rotation.set(0, 0, 0);
+        if (henriMonster.butcherKnife) henriMonster.butcherKnife.visible = false;
+        if (henriMonster.sinisterMouth) henriMonster.sinisterMouth.scale.set(0.85, 0.75, 1);
+
+        document.getElementById('bedroomNightLabel').textContent = `MALAM ${night} / 3`;
+        document.getElementById('henriMidnightLine').textContent = HENRI_MIDNIGHT_LINES[night] || HENRI_MIDNIGHT_LINES[1];
+
+        setUIMode('BEDROOM');
+      }
+
+      function startSleepCutscene() {
+        audio.playClick();
+        setUIMode('SLEEP_CUTSCENE');
+
+        player.targetSleepY = 0.88;
+        player.targetSleepPitch = 0.42;
+
+        document.getElementById('eyelidTop').style.height = '52%';
+        document.getElementById('eyelidBottom').style.height = '52%';
+
+        const night = gameState.night;
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+        document.getElementById('sleepCutsceneNight').textContent = `MALAM ${night} — ${cStats.shortName.toUpperCase()} TERPEJAM DI BALIK SELIMUT`;
+        document.getElementById('sleepClockText').textContent = '00:00';
+        document.getElementById('sleepBarFill').style.width = '0%';
+        document.getElementById('sleepNarrativeText').textContent =
+          `Kamu menuruti perintah Henri dan memejamkan mata... Langkah berat Henri terdengar di luar pintu kamar...`;
+
+        const nextBtn = document.getElementById('btnAfterSleepNext');
+        nextBtn.classList.add('hidden');
+
+        let simMins = 0;
+        let tickToggle = false;
+        gameState.sleepTimer = setInterval(() => {
+          simMins += 15;
+          tickToggle = !tickToggle;
+          audio.playClockTick(tickToggle);
+
+          document.getElementById('sleepClockText').textContent = formatNightClock(simMins);
+          document.getElementById('sleepBarFill').style.width = `${Math.min(100, (simMins / 360) * 100)}%`;
+
+          if (simMins === 120) {
+            document.getElementById('sleepNarrativeText').textContent =
+              '02:00 — Henri berdiri diam di depan pintu kamarmu, memastikan kamu benar-benar tidur...';
+          } else if (simMins === 240) {
+            document.getElementById('sleepNarrativeText').textContent =
+              '04:00 — Langkah kaki Henri perlahan menjauh menyusuri lorong gelap...';
+          }
+
+          if (simMins >= 360) {
+            clearInterval(gameState.sleepTimer);
+            gameState.sleepTimer = null;
+            gameState.stats.nightsSlept += 1;
+
+            document.getElementById('eyelidTop').style.height = '0%';
+            document.getElementById('eyelidBottom').style.height = '0%';
+            henriMonster.root.visible = false;
+            bedroomDoorTargetAngle = 0;
+
+            if (night >= 3) {
+              enterDay3SunriseVictory();
+            } else {
+              document.getElementById('sleepNarrativeText').textContent =
+                `Pukul 06:00 pagi tiba! Kamu selamat dari Henri di Malam ${night}.`;
+              nextBtn.textContent = `LANJUT KE MALAM ${night + 1} →`;
+              nextBtn.classList.remove('hidden');
+            }
+          }
+        }, 190);
+      }
+
+      function startStealthNight() {
+        audio.playClick();
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+
+        player.isHidden = false;
+        player.currentWardrobe = null;
+        player.pos.set(4.2 * CELL, 1.65, 3.5 * CELL);
+        player.yaw = -Math.PI / 2;
+        player.pitch = 0;
+        player.stamina = cStats.maxStamina;
+        player.flashlightOn = true;
+
+        flashlight.intensity = cStats.flashlightIntensity;
+        flashlight.distance = cStats.flashlightRange;
+        flashlight.angle = cStats.flashlightAngle;
+        flashlight.color.setHex(0xfff4dc);
+
+        gameState.clockMinutes = 0;
+        gameState.keysCollected = 0;
+
+        document.getElementById('hudNightBadge').textContent = `MALAM ${gameState.night}/3`;
+        document.getElementById('hudClock').textContent = '00:00';
+        document.getElementById('hudKeysCount').textContent = '0/3';
+        document.getElementById('hudCharLabel').textContent = cStats.shortName;
+        document.getElementById('hudObjectiveText').innerHTML =
+          `Cari <span class="text-amber-300 font-bold">3 Kunci Keluar</span> & buka <span class="text-emerald-300 font-bold">Pintu Keluar Utama</span>, atau bertahan dari <span class="text-red-400 font-bold">Henri</span> hingga <span class="text-white font-bold">06:00</span>!`;
+
+        spawnKeysForNight(gameState.night);
+        resetHenriForStealth(gameState.night);
+        setUIMode('STEALTH');
+        showStealthHenriDialogue(`Henri: "Kamu tidak tidur, ${cStats.shortName}? Jangan sampai diketemu oleh Henri!"`, 4.0);
+      }
+
+      function completeNightSurvival(reason = 'waktu') {
+        if (document.pointerLockElement) {
+          try { document.exitPointerLock(); } catch (e) {}
+        }
+        document.getElementById('chaseVignette').classList.add('hidden');
+        document.getElementById('stealthHenriSubtitleBox').classList.add('hidden');
+        henriMonster.root.visible = false;
+        clearKeys();
+        gameState.stats.nightsEscaped += 1;
+
+        if (gameState.night >= 3) {
+          enterDay3SunriseVictory();
+          return;
+        }
+
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+        document.getElementById('nightSurvivedSummary').textContent = reason === 'kunci'
+          ? `${cStats.shortName} berhasil membuka Pintu Keluar Utama dan kabur dari kejaran Henri pada Malam ${gameState.night}!`
+          : `Pukul 06:00 pagi tiba! Cahaya fajar menyinari rumah dan Henri tidak bisa mengejar ${cStats.shortName} lagi!`;
+        document.getElementById('btnNextNightAwake').textContent = `LANJUT KE MALAM ${gameState.night + 1} →`;
+        setUIMode('NIGHT_SURVIVED');
+      }
+
+      /* ==========================================================
+         12. STEALTH MODE FRAME UPDATE
+      ========================================================== */
+      function updateStealthMode(dt) {
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+
+        // Advance clock: 360 game-minutes in ~75 real seconds (4.8 mins/sec)
+        gameState.clockMinutes += dt * 4.8;
+        document.getElementById('hudClock').textContent = formatNightClock(gameState.clockMinutes);
+        if (gameState.clockMinutes >= 360) {
+          completeNightSurvival('waktu');
+          return;
+        }
+
+        // Stealth Henri subtitle countdown
+        if (stealthSubtitleTimer > 0) {
+          stealthSubtitleTimer -= dt;
+          if (stealthSubtitleTimer <= 0) {
+            document.getElementById('stealthHenriSubtitleBox').classList.add('hidden');
+          }
+        }
+
+        // Animate floating keys
+        const now = performance.now() * 0.001;
+        keyItems.forEach((k) => {
+          if (!k.collected) {
+            k.group.rotation.y += dt * 2.2;
+            k.group.position.y = k.baseY + Math.sin(now * 3.0 + k.id) * 0.08;
+          }
+        });
+
+        // Keyboard Q/R camera turn
+        if (keysDown['KeyQ']) player.yaw += 1.9 * dt;
+        if (keysDown['KeyR']) player.yaw -= 1.9 * dt;
+
+        // Movement vector calculation
+        let moveForward = 0;
+        let moveRight = 0;
+        if (keysDown['KeyW'] || keysDown['ArrowUp']) moveForward += 1;
+        if (keysDown['KeyS'] || keysDown['ArrowDown']) moveForward -= 1;
+        if (keysDown['KeyD'] || keysDown['ArrowRight']) moveRight += 1;
+        if (keysDown['KeyA'] || keysDown['ArrowLeft']) moveRight -= 1;
+
+        if (Math.abs(touchMove.x) > 0.08 || Math.abs(touchMove.y) > 0.08) {
+          moveRight += touchMove.x;
+          moveForward -= touchMove.y;
+        }
+
+        const wantSprint = Boolean(keysDown['ShiftLeft'] || keysDown['ShiftRight'] || keysDown['TouchSprint']);
+        const isMoving = !player.isHidden && (Math.abs(moveForward) > 0.05 || Math.abs(moveRight) > 0.05);
+        const isSprinting = isMoving && wantSprint && player.stamina > 4;
+
+        if (isSprinting) {
+          player.stamina = Math.max(0, player.stamina - 28 * dt);
+        } else {
+          player.stamina = Math.min(cStats.maxStamina, player.stamina + cStats.staminaRegen * dt);
+        }
+
+        const stamPct = Math.round((player.stamina / cStats.maxStamina) * 100);
+        document.getElementById('hudStaminaText').textContent = `${stamPct}%`;
+        document.getElementById('hudStaminaFill').style.width = `${stamPct}%`;
+
+        if (isMoving) {
+          const speed = isSprinting ? cStats.sprintSpeed : cStats.walkSpeed;
+          const len = Math.hypot(moveForward, moveRight) || 1;
+          const nf = moveForward / len;
+          const nr = moveRight / len;
+
+          const forwardX = -Math.sin(player.yaw);
+          const forwardZ = -Math.cos(player.yaw);
+          const rightX = Math.cos(player.yaw);
+          const rightZ = -Math.sin(player.yaw);
+
+          player.pos.x += (forwardX * nf + rightX * nr) * speed * dt;
+          player.pos.z += (forwardZ * nf + rightZ * nr) * speed * dt;
+          resolveWallCollision(player.pos, 0.42);
+
+          player.stepTimer += dt * (isSprinting ? 13.5 : 8.5);
+          if (Math.sin(player.stepTimer) > 0.94 && Math.sin(player.stepTimer - dt * (isSprinting ? 13.5 : 8.5)) <= 0.94) {
+            audio.playPlayerStep(isSprinting);
+          }
+          camera.position.set(player.pos.x, player.pos.y + Math.sin(player.stepTimer) * (isSprinting ? 0.065 : 0.035), player.pos.z);
+        } else {
+          camera.position.set(player.pos.x, player.pos.y + Math.sin(now * 2.0) * 0.015, player.pos.z);
+        }
+
+        camera.rotation.order = 'YXZ';
+        camera.rotation.y = player.yaw;
+        camera.rotation.x = player.pitch;
+        camera.rotation.z = 0;
+
+        updateContextualInteractable();
+        updateHenriAI(dt, isSprinting);
+
+        // Proximity heartbeat audio when Henri is near
+        const distToHenri = Math.hypot(player.pos.x - henriAI.pos.x, player.pos.z - henriAI.pos.z);
+        if (distToHenri < 12) {
+          const intensity = Math.max(0.1, 1 - distToHenri / 12);
+          player.heartbeatTimer -= dt * (1 + intensity * 1.6);
+          if (player.heartbeatTimer <= 0) {
+            audio.playHeartbeat(intensity);
+            player.heartbeatTimer = 0.85;
+          }
+        }
+      }
+
+      /* ==========================================================
+         13. UI BUTTONS, KEYBOARD, MOUSE & TOUCH EVENT LISTENERS
+      ========================================================== */
+      const cardRina = document.getElementById('cardRina');
+      const cardRaka = document.getElementById('cardRaka');
+
+      function selectCharacter(charKey) {
+        gameState.selectedChar = charKey;
+        audio.playClick();
+        if (charKey === 'rina') {
+          cardRina.className = 'p-4 rounded-2xl border-2 border-red-500 bg-zinc-950/85 shadow-[0_0_25px_rgba(220,38,38,0.3)] backdrop-blur-md text-left transition active:scale-[0.99]';
+          cardRaka.className = 'p-4 rounded-2xl border-2 border-zinc-800 bg-zinc-950/75 hover:border-blue-500/60 backdrop-blur-md text-left transition active:scale-[0.99]';
+          document.getElementById('tagRina').classList.remove('hidden');
+          document.getElementById('tagRaka').classList.add('hidden');
+        } else {
+          cardRaka.className = 'p-4 rounded-2xl border-2 border-blue-500 bg-zinc-950/85 shadow-[0_0_25px_rgba(59,130,246,0.3)] backdrop-blur-md text-left transition active:scale-[0.99]';
+          cardRina.className = 'p-4 rounded-2xl border-2 border-zinc-800 bg-zinc-950/75 hover:border-red-500/60 backdrop-blur-md text-left transition active:scale-[0.99]';
+          document.getElementById('tagRaka').classList.remove('hidden');
+          document.getElementById('tagRina').classList.add('hidden');
+        }
+      }
+
+      cardRina.addEventListener('click', () => selectCharacter('rina'));
+      cardRaka.addEventListener('click', () => selectCharacter('raka'));
+
+      document.getElementById('btnToggleAudio').addEventListener('click', () => {
+        const active = audio.toggle();
+        document.getElementById('audioIcon').textContent = active ? '🔊' : '🔇';
+        document.getElementById('audioLabel').textContent = active ? 'Suara: Aktif' : 'Suara: Mati';
+      });
+
+      document.getElementById('btnStartNight1').addEventListener('click', () => {
+        audio.startDrone();
+        audio.playClick();
+        gameState.stats = { nightsSlept: 0, nightsEscaped: 0, totalKeysFound: 0 };
+        enterBedroomMidnight(1);
+      });
+
+      document.getElementById('btnSleepChoice').addEventListener('click', startSleepCutscene);
+      document.getElementById('btnAwakeChoice').addEventListener('click', startStealthNight);
+
+      document.getElementById('btnAfterSleepNext').addEventListener('click', () => {
+        audio.playClick();
+        enterBedroomMidnight(gameState.night + 1);
+      });
+
+      document.getElementById('btnNextNightAwake').addEventListener('click', () => {
+        audio.playClick();
+        enterBedroomMidnight(gameState.night + 1);
+      });
+
+      document.getElementById('btnHudInteract').addEventListener('click', triggerPlayerInteract);
+      document.getElementById('btnHudFlashlight').addEventListener('click', toggleFlashlight);
+
+      const btnSprint = document.getElementById('btnHudSprint');
+      btnSprint.addEventListener('pointerdown', () => { keysDown['TouchSprint'] = true; });
+      btnSprint.addEventListener('pointerup', () => { keysDown['TouchSprint'] = false; });
+      btnSprint.addEventListener('pointerleave', () => { keysDown['TouchSprint'] = false; });
+
+      document.getElementById('btnTurnLeft').addEventListener('click', () => { player.yaw += 0.45; });
+      document.getElementById('btnTurnRight').addEventListener('click', () => { player.yaw -= 0.45; });
+
+      window.addEventListener('keydown', (e) => {
+        keysDown[e.code] = true;
+        if (e.code === 'KeyE') triggerPlayerInteract();
+        if (e.code === 'KeyF') toggleFlashlight();
+      });
+
+      window.addEventListener('keyup', (e) => {
+        keysDown[e.code] = false;
+      });
+
+      // Desktop Pointer Lock + Drag Look
+      canvas.addEventListener('click', () => {
+        if (gameState.mode === 'STEALTH' && !document.pointerLockElement && canvas.requestPointerLock) {
+          try { canvas.requestPointerLock(); } catch (e) {}
+        }
+      });
+
+      document.addEventListener('mousemove', (e) => {
+        if (gameState.mode !== 'STEALTH') return;
+        if (document.pointerLockElement === canvas) {
+          player.yaw -= e.movementX * 0.0024;
+          player.pitch = Math.max(-1.05, Math.min(1.05, player.pitch - e.movementY * 0.0022));
+        }
+      });
+
+      // Touch Drag Look on 3D Canvas
+      canvas.addEventListener('touchstart', (e) => {
+        if (gameState.mode !== 'STEALTH') return;
+        for (const t of e.changedTouches) {
+          if (touchLook.activeId === null) {
+            touchLook.activeId = t.identifier;
+            touchLook.lastX = t.clientX;
+            touchLook.lastY = t.clientY;
+          }
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchmove', (e) => {
+        if (gameState.mode !== 'STEALTH') return;
+        for (const t of e.changedTouches) {
+          if (t.identifier === touchLook.activeId) {
+            const dx = t.clientX - touchLook.lastX;
+            const dy = t.clientY - touchLook.lastY;
+            touchLook.lastX = t.clientX;
+            touchLook.lastY = t.clientY;
+            player.yaw -= dx * 0.0052;
+            player.pitch = Math.max(-1.05, Math.min(1.05, player.pitch - dy * 0.0045));
+          }
+        }
+      }, { passive: true });
+
+      canvas.addEventListener('touchend', (e) => {
+        for (const t of e.changedTouches) {
+          if (t.identifier === touchLook.activeId) {
+            touchLook.activeId = null;
+          }
+        }
+      }, { passive: true });
+
+      // Virtual Movement Joystick
+      const joyZone = document.getElementById('touchJoyZone');
+      const joyKnob = document.getElementById('touchJoyKnob');
+
+      function updateJoystick(clientX, clientY) {
+        const rect = joyZone.getBoundingClientRect();
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const maxR = rect.width * 0.36;
+        let dx = clientX - cx;
+        let dy = clientY - cy;
+        const dist = Math.hypot(dx, dy);
+        if (dist > maxR) {
+          dx = (dx / dist) * maxR;
+          dy = (dy / dist) * maxR;
+        }
+        joyKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+        touchMove.x = dx / maxR;
+        touchMove.y = dy / maxR;
+      }
+
+      function resetJoystick() {
+        touchMove.activeId = null;
+        touchMove.x = 0;
+        touchMove.y = 0;
+        joyKnob.style.transform = 'translate(0px, 0px)';
+      }
+
+      joyZone.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        const t = e.changedTouches[0];
+        touchMove.activeId = t.identifier;
+        updateJoystick(t.clientX, t.clientY);
+      }, { passive: false });
+
+      joyZone.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        for (const t of e.changedTouches) {
+          if (t.identifier === touchMove.activeId) {
+            updateJoystick(t.clientX, t.clientY);
+          }
+        }
+      }, { passive: false });
+
+      joyZone.addEventListener('touchend', (e) => {
+        for (const t of e.changedTouches) {
+          if (t.identifier === touchMove.activeId) {
+            resetJoystick();
+          }
+        }
+      }, { passive: true });
+
+      /* ==========================================================
+         14. VISCERAL 3.8-SECOND 3D JUMPSCARE, EXECUTION & MOTHER PHOTO
+      ========================================================== */
+      function renderMotherDeathPhoto(charShortName) {
+        const photoCanvas = document.getElementById('motherPhotoCanvas');
+        if (!photoCanvas) return;
+        const ctx = photoCanvas.getContext('2d');
+        const W = photoCanvas.width;
+        const H = photoCanvas.height;
+
+        const bgGrad = ctx.createRadialGradient(W * 0.45, H * 0.55, 18, W * 0.5, H * 0.5, W * 0.72);
+        bgGrad.addColorStop(0, '#3f3f46');
+        bgGrad.addColorStop(0.55, '#18181b');
+        bgGrad.addColorStop(1, '#09090b');
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, W, H);
+
+        ctx.fillStyle = '#1c120c';
+        ctx.fillRect(0, H * 0.58, W, H * 0.42);
+        ctx.strokeStyle = '#0c0704';
+        ctx.lineWidth = 2;
+        for (let y = H * 0.62; y < H; y += 14) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(W, y);
+          ctx.stroke();
+        }
+
+        ctx.fillStyle = '#050507';
+        ctx.fillRect(W * 0.68, H * 0.1, W * 0.24, H * 0.52);
+        ctx.fillStyle = '#020203';
+        ctx.beginPath();
+        ctx.arc(W * 0.8, H * 0.24, 15, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillRect(W * 0.74, H * 0.31, 38, 62);
+        ctx.fillStyle = '#ff1e1e';
+        ctx.shadowColor = '#ff0000';
+        ctx.shadowBlur = 8;
+        ctx.fillRect(W * 0.775, H * 0.23, 5, 3);
+        ctx.fillRect(W * 0.81, H * 0.23, 5, 3);
+        ctx.shadowBlur = 0;
+
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.12, H * 0.56);
+        ctx.lineTo(W * 0.24, H * 0.46);
+        ctx.lineTo(W * 0.28, H * 0.62);
+        ctx.stroke();
+
+        const bloodGrad = ctx.createRadialGradient(W * 0.43, H * 0.78, 8, W * 0.43, H * 0.78, 88);
+        bloodGrad.addColorStop(0, 'rgba(127, 13, 13, 0.95)');
+        bloodGrad.addColorStop(0.65, 'rgba(85, 8, 8, 0.85)');
+        bloodGrad.addColorStop(1, 'rgba(45, 4, 4, 0)');
+        ctx.fillStyle = bloodGrad;
+        ctx.beginPath();
+        ctx.ellipse(W * 0.43, H * 0.79, 86, 26, -0.06, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#312e81';
+        ctx.beginPath();
+        ctx.ellipse(W * 0.44, H * 0.73, 48, 17, -0.08, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = '#818cf8';
+        [[-22, -3], [-8, 4], [10, -4], [24, 3], [0, -2]].forEach(([ox, oy]) => {
+          ctx.beginPath();
+          ctx.arc(W * 0.44 + ox, H * 0.73 + oy, 2.2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        ctx.strokeStyle = '#d6a88c';
+        ctx.lineWidth = 7;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(W * 0.36, H * 0.74);
+        ctx.lineTo(W * 0.25, H * 0.83);
+        ctx.stroke();
+
+        ctx.fillStyle = '#18181b';
+        ctx.beginPath();
+        ctx.arc(W * 0.27, H * 0.69, 13, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#d6a88c';
+        ctx.beginPath();
+        ctx.arc(W * 0.31, H * 0.71, 13, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.strokeStyle = '#1f2937';
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.29, H * 0.71);
+        ctx.lineTo(W * 0.33, H * 0.715);
+        ctx.stroke();
+
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(W * 0.18, 0);
+        ctx.lineTo(W * 0.34, H * 0.42);
+        ctx.lineTo(W * 0.26, H);
+        ctx.moveTo(W * 0.34, H * 0.42);
+        ctx.lineTo(W * 0.62, H * 0.35);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(136, 12, 12, 0.78)';
+        ctx.beginPath();
+        ctx.ellipse(W * 0.88, H * 0.84, 24, 16, 0.45, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
+        ctx.fillRect(8, 8, 210, 20);
+        ctx.fillStyle = '#fca5a5';
+        ctx.font = 'bold 10px monospace';
+        ctx.fillText(`HENRI — KORBAN #2: IBU (${charShortName.toUpperCase()})`, 13, 21);
+      }
+
+      const deathSeq = {
+        timer: 0,
+        duration: 3.8,
+        fromWardrobe: false,
+        stage2Triggered: false,
+        secondSlashTriggered: false,
+        stage3Triggered: false,
+        camStartPos: new THREE.Vector3(),
+        camFloorPos: new THREE.Vector3(),
+        henriStartPos: new THREE.Vector3(),
+        henriFacePos: new THREE.Vector3(),
+        currentRoll: 0,
+        recoilYaw: 0,
+        recoilPitch: 0
+      };
+
+      function triggerDeathSequence(fromWardrobe = false) {
+        if (gameState.mode === 'DEATH_SEQUENCE') return;
+        document.getElementById('chaseVignette').classList.add('hidden');
+        document.getElementById('stealthHenriSubtitleBox').classList.add('hidden');
+        document.getElementById('jumpscareSubtitleBox').classList.add('hidden');
+        if (document.pointerLockElement) {
+          try { document.exitPointerLock(); } catch (e) {}
+        }
+
+        deathSeq.timer = 0;
+        deathSeq.fromWardrobe = fromWardrobe;
+        deathSeq.stage2Triggered = false;
+        deathSeq.secondSlashTriggered = false;
+        deathSeq.stage3Triggered = false;
+        deathSeq.currentRoll = 0;
+        deathSeq.recoilYaw = 0;
+        deathSeq.recoilPitch = 0;
+
+        player.pos.y = 1.65;
+        deathSeq.camStartPos.copy(player.pos);
+        deathSeq.camFloorPos.set(player.pos.x, 0.22, player.pos.z);
+
+        const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+        henriMonster.root.visible = true;
+        henriMonster.root.position.copy(player.pos).addScaledVector(forward, 0.56);
+        henriMonster.root.position.y = 0;
+        henriMonster.root.lookAt(player.pos.x, 0, player.pos.z);
+        deathSeq.henriStartPos.copy(henriMonster.root.position);
+        deathSeq.henriFacePos.set(henriMonster.root.position.x, 1.74, henriMonster.root.position.z);
+
+        henriMonster.leftLeg.rotation.x = 0;
+        henriMonster.rightLeg.rotation.x = 0;
+        henriMonster.leftArmPivot.rotation.set(-1.68, 0.18, -0.32);
+        henriMonster.rightArmPivot.rotation.set(-2.35, -0.18, 0.34);
+        if (henriMonster.sinisterMouth) {
+          henriMonster.sinisterMouth.scale.set(1.45, 2.85, 1.2);
+        }
+        if (henriMonster.butcherKnife) {
+          henriMonster.butcherKnife.visible = true;
+        }
+        if (henriMonster.eyeGlowLight) {
+          henriMonster.eyeGlowLight.intensity = 6.5;
+          henriMonster.eyeGlowLight.color.setHex(0xff0000);
+        }
+
+        audio.playDeathGrabScreech();
+
+        const flash = document.getElementById('jumpscareFlash');
+        flash.classList.remove('hidden');
+        setTimeout(() => flash.classList.add('hidden'), 180);
+
+        clearBloodOverlay();
+        const dyingEl = document.getElementById('dyingOverlay');
+        dyingEl.classList.remove('hidden', 'active');
+        dyingEl.style.opacity = '0';
+        document.getElementById('eyelidTop').style.height = '0%';
+        document.getElementById('eyelidBottom').style.height = '0%';
+
+        setUIMode('DEATH_SEQUENCE');
+      }
+
+      function updateDeathSequence(dt) {
+        deathSeq.timer += dt;
+        const t = deathSeq.timer;
+
+        deathSeq.recoilYaw *= Math.pow(0.06, dt);
+        deathSeq.recoilPitch *= Math.pow(0.06, dt);
+
+        if (t < 0.95) {
+          const strobe = Math.floor(t * 32) % 2 === 0;
+          flashlight.color.setHex(strobe ? 0xff0000 : 0xffffff);
+          flashlight.intensity = strobe ? 6.0 : 1.4;
+
+          const lunge = Math.sin((t / 0.95) * Math.PI) * 0.16;
+          const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
+          henriMonster.root.position.copy(deathSeq.henriStartPos).addScaledVector(forward, -lunge);
+          henriMonster.root.rotation.z = Math.sin(t * 48) * 0.085;
+
+          const shakeX = (Math.random() - 0.5) * 0.11;
+          const shakeY = (Math.random() - 0.5) * 0.11;
+          const shakeZ = (Math.random() - 0.5) * 0.11;
+          camera.position.set(
+            deathSeq.camStartPos.x + shakeX,
+            deathSeq.camStartPos.y + shakeY,
+            deathSeq.camStartPos.z + shakeZ
+          );
+          camera.lookAt(deathSeq.henriFacePos);
+          camera.rotateZ(Math.sin(t * 56) * 0.06);
+        } else if (t < 1.85) {
+          const st = (t - 0.95) / 0.9;
+          flashlight.color.setHex(0xff2a2a);
+          flashlight.intensity = 3.5 + Math.sin(t * 35) * 1.4;
+          henriMonster.root.rotation.z = 0;
+
+          if (st < 0.45) {
+            const swing = Math.min(1, st / 0.18);
+            henriMonster.rightArmPivot.rotation.x = -2.35 + swing * 1.5;
+            henriMonster.rightArmPivot.rotation.z = 0.34 - swing * 0.48;
+
+            if (!deathSeq.stage2Triggered && t >= 1.02) {
+              deathSeq.stage2Triggered = true;
+              audio.playDeathBladeSlash();
+              spawnBloodImpact(0.52, 0.44, 1.2);
+              deathSeq.currentRoll = -0.28;
+              deathSeq.recoilYaw = 0.22;
+              deathSeq.recoilPitch = -0.16;
+
+              const flash = document.getElementById('jumpscareFlash');
+              flash.classList.remove('hidden');
+              setTimeout(() => flash.classList.add('hidden'), 240);
+            }
+          } else {
+            const st2 = (st - 0.45) / 0.55;
+            if (st2 < 0.25) {
+              henriMonster.leftArmPivot.rotation.set(-1.55, 0.55, 0.55);
+            } else {
+              const slash2 = Math.min(1, (st2 - 0.25) / 0.25);
+              henriMonster.leftArmPivot.rotation.set(-1.35, -0.5 * slash2, 0.55 - slash2 * 1.15);
+            }
+
+            if (!deathSeq.secondSlashTriggered && t >= 1.45) {
+              deathSeq.secondSlashTriggered = true;
+              audio.playDeathBladeSlash();
+              spawnBloodImpact(0.42, 0.55, 1.05);
+              deathSeq.currentRoll = 0.3;
+              deathSeq.recoilYaw = -0.24;
+              deathSeq.recoilPitch = -0.18;
+
+              const flash = document.getElementById('jumpscareFlash');
+              flash.classList.remove('hidden');
+              setTimeout(() => flash.classList.add('hidden'), 220);
+            }
+          }
+
+          const microShake = Math.max(0, 1 - st) * 0.055;
+          camera.position.set(
+            deathSeq.camStartPos.x + (Math.random() - 0.5) * microShake,
+            deathSeq.camStartPos.y + (Math.random() - 0.5) * microShake,
+            deathSeq.camStartPos.z + (Math.random() - 0.5) * microShake
+          );
+          camera.lookAt(
+            deathSeq.henriFacePos.x + deathSeq.recoilYaw,
+            deathSeq.henriFacePos.y + deathSeq.recoilPitch,
+            deathSeq.henriFacePos.z
+          );
+          camera.rotateZ(deathSeq.currentRoll);
+        } else {
+          if (!deathSeq.stage3Triggered) {
+            deathSeq.stage3Triggered = true;
+            audio.playDyingAudioSequence();
+
+            const cStats = CHARACTER_STATS[gameState.selectedChar];
+            const tauntLine = `Henri: "Udah ${cStats.shortName} mati, sekarang ibunya..."`;
+            document.getElementById('jumpscareSubtitleText').textContent = tauntLine;
+            document.getElementById('jumpscareSubtitleBox').classList.remove('hidden');
+            audio.speakHenriDeathLine(cStats.shortName);
+
+            const dyingEl = document.getElementById('dyingOverlay');
+            dyingEl.classList.remove('hidden');
+            requestAnimationFrame(() => {
+              dyingEl.classList.add('active');
+              dyingEl.style.opacity = '1';
+            });
+
+            document.getElementById('eyelidTop').style.height = '52%';
+            document.getElementById('eyelidBottom').style.height = '52%';
+          }
+
+          const ft = Math.min(1, (t - 1.85) / 1.95);
+          const fallEase = Math.min(1, Math.pow(ft * 2.2, 2.2));
+          const camY = 1.65 - (1.65 - 0.22) * fallEase;
+
+          const bounce = (ft > 0.42 && ft < 0.62) ? Math.sin(((ft - 0.42) / 0.2) * Math.PI) * 0.055 : 0;
+
+          const targetRoll = (75 * Math.PI) / 180;
+          const rollEase = Math.min(1, ft * 1.9);
+          const currentRoll = targetRoll * (1 - Math.pow(1 - rollEase, 3));
+
+          henriMonster.root.rotation.x = ft * 0.36;
+          henriMonster.leftArmPivot.rotation.set(-0.65, 0, -0.18);
+          henriMonster.rightArmPivot.rotation.set(-0.85, 0, 0.25);
+          flashlight.color.setHex(0xff3b3b);
+          flashlight.intensity = Math.max(0.25, 2.4 * (1 - ft * 0.8));
+
+          camera.position.set(
+            deathSeq.camFloorPos.x,
+            camY + bounce,
+            deathSeq.camFloorPos.z
+          );
+          camera.lookAt(
+            deathSeq.henriFacePos.x,
+            1.65 - ft * 0.34,
+            deathSeq.henriFacePos.z
+          );
+          camera.rotateZ(currentRoll);
+        }
+
+        updateAndRenderBloodOverlay(dt);
+
+        if (t >= deathSeq.duration) {
+          finishDeathSequence();
+        }
+      }
+
+      function finishDeathSequence() {
+        henriMonster.root.rotation.x = 0;
+        henriMonster.root.rotation.z = 0;
+        flashlight.color.setHex(0xfff4dc);
+        flashlight.intensity = 0;
+        document.getElementById('jumpscareSubtitleBox').classList.add('hidden');
+
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+        document.getElementById('henriDeathTauntQuote').innerHTML =
+          `<span class="text-red-500 font-black not-italic uppercase tracking-wider">Henri:</span> "Udah ${cStats.shortName} mati, sekarang ibunya..."`;
+        document.getElementById('motherPhotoCaption').textContent = `HENRI: "IBUMU SUDAH MATI..."`;
+        renderMotherDeathPhoto(cStats.shortName);
+
+        document.getElementById('gameOverMessage').textContent = deathSeq.fromWardrobe
+          ? `Henri melihat ${cStats.shortName} bersembunyi di Malam ${gameState.night}, mendobrak lemari dengan kuku berdarahnya, lalu menghabisi ibumu!`
+          : `Henri menangkap ${cStats.shortName} di Malam ${gameState.night} dengan wajah hitam, mata merah, gigi panjang, dan kuku berdarah — lalu membunuh ibumu!`;
+
+        setUIMode('JUMPSCARE');
+      }
+
+      /* ==========================================================
+         15. DAY 3 SUNRISE VICTORY ENDING (HENRI RETURNS TO NORMAL)
+      ========================================================== */
+      function enterDay3SunriseVictory() {
+        audio.stopDrone();
+        audio.playSunriseChime();
+
+        clearBloodOverlay();
+        const dyingEl = document.getElementById('dyingOverlay');
+        dyingEl.classList.add('hidden');
+        dyingEl.classList.remove('active');
+        dyingEl.style.opacity = '0';
+        document.getElementById('eyelidTop').style.height = '0%';
+        document.getElementById('eyelidBottom').style.height = '0%';
+
+        scene.background.setHex(0xfde68a);
+        scene.fog.color.setHex(0xfef3c7);
+        scene.fog.density = 0.014;
+        ambientLight.color.setHex(0xfffbeb);
+        ambientLight.intensity = 1.45;
+        sunLight.intensity = 2.2;
+        hallBulbLight.intensity = 0.2;
+        moonLightBedroom.intensity = 0;
+        moonLightLiving.intensity = 0;
+
+        flashlight.intensity = 0;
+        player.flashlightOn = false;
+
+        henriMonster.root.visible = false;
+        rinaPreview.root.visible = false;
+        rakaPreview.root.visible = false;
+
+        henriNormalDay.root.visible = true;
+        henriNormalDay.root.position.set(12.0 * CELL, 0, 10.6 * CELL);
+        henriNormalDay.root.rotation.set(0, Math.PI, 0);
+
+        player.pos.set(12.0 * CELL, 1.65, 8.2 * CELL);
+        player.yaw = Math.PI;
+        player.pitch = 0.03;
+
+        const cStats = CHARACTER_STATS[gameState.selectedChar];
+        document.getElementById('victoryStatsGrid').innerHTML = `
+          <div class="p-3 rounded-2xl bg-zinc-900/90 border border-amber-500/30">
+            <div class="text-[10px] uppercase tracking-wider text-gray-400">Karakter</div>
+            <div class="text-sm sm:text-base font-extrabold text-amber-300 mt-0.5">${cStats.shortName}</div>
+          </div>
+          <div class="p-3 rounded-2xl bg-zinc-900/90 border border-amber-500/30">
+            <div class="text-[10px] uppercase tracking-wider text-gray-400">Malam Tidur / Kabur</div>
+            <div class="text-sm sm:text-base font-extrabold text-emerald-300 mt-0.5">${gameState.stats.nightsSlept} / ${gameState.stats.nightsEscaped}</div>
+          </div>
+          <div class="p-3 rounded-2xl bg-zinc-900/90 border border-amber-500/30">
+            <div class="text-[10px] uppercase tracking-wider text-gray-400">Total Kunci</div>
+            <div class="text-sm sm:text-base font-extrabold text-sky-300 mt-0.5">${gameState.stats.totalKeysFound} 🔑</div>
+          </div>
+        `;
+
+        setUIMode('VICTORY');
+      }
+
+      function returnToMainMenu() {
+        audio.playClick();
+        audio.startDrone();
+        clearBloodOverlay();
+        clearKeys();
+        const dyingEl = document.getElementById('dyingOverlay');
+        dyingEl.classList.add('hidden');
+        dyingEl.classList.remove('active');
+        dyingEl.style.opacity = '0';
+        document.getElementById('eyelidTop').style.height = '0%';
+        document.getElementById('eyelidBottom').style.height = '0%';
+
+        setNightAtmosphere();
+        moonLightBedroom.intensity = 1.75;
+        flashlight.intensity = 0;
+        bedroomDoorTargetAngle = 0;
+        henriMonster.root.visible = false;
+        henriNormalDay.root.visible = false;
+        rinaPreview.root.visible = true;
+        rakaPreview.root.visible = true;
+        gameState.night = 1;
+        setUIMode('TITLE');
+      }
+
+      document.getElementById('btnRetryCurrentNight').addEventListener('click', () => {
+        audio.playClick();
+        enterBedroomMidnight(gameState.night);
+      });
+
+      document.getElementById('btnReturnMainMenu').addEventListener('click', returnToMainMenu);
+      document.getElementById('btnVictoryPlayAgain').addEventListener('click', returnToMainMenu);
+
+      /* ==========================================================
+         16. MAIN 3D RENDER & ANIMATION LOOP
+      ========================================================== */
+      moonLightBedroom.intensity = 1.75;
+      flashlight.intensity = 0;
+      setUIMode('TITLE');
+
+      const clock = new THREE.Clock();
+
+      function animate() {
+        requestAnimationFrame(animate);
+        const dt = Math.min(clock.getDelta(), 0.05);
+        const now = performance.now() * 0.001;
+
+        bedroomDoorPivot.rotation.y += (bedroomDoorTargetAngle - bedroomDoorPivot.rotation.y) * Math.min(1, dt * 4);
+
+        if (gameState.mode === 'TITLE') {
+          camera.position.set(3.85 * CELL, 1.48, 5.15 * CELL);
+          camera.rotation.order = 'YXZ';
+          camera.lookAt(3.85 * CELL, 1.12, 3.6 * CELL);
+
+          rinaPreview.root.position.y = Math.sin(now * 2.2) * 0.02;
+          rakaPreview.root.position.y = Math.sin(now * 2.2 + 1.2) * 0.02;
+          if (gameState.selectedChar === 'rina') {
+            rinaPreview.root.rotation.y = 0.25 + Math.sin(now * 1.5) * 0.18;
+            rakaPreview.root.rotation.y = -0.35;
+          } else {
+            rakaPreview.root.rotation.y = -0.25 + Math.sin(now * 1.5) * 0.18;
+            rinaPreview.root.rotation.y = 0.35;
+          }
+        } else if (gameState.mode === 'BEDROOM') {
+          camera.position.set(player.pos.x, player.pos.y + Math.sin(now * 2.0) * 0.015, player.pos.z);
+          camera.rotation.order = 'YXZ';
+          camera.rotation.y = player.yaw + Math.sin(now * 0.9) * 0.025;
+          camera.rotation.x = player.pitch;
+          camera.rotation.z = 0;
+
+          if (henriMonster.eyeGlowLight) {
+            henriMonster.eyeGlowLight.intensity = 1.15 + Math.sin(now * 4.5) * 0.35;
+          }
+        } else if (gameState.mode === 'SLEEP_CUTSCENE') {
+          player.pos.y += (player.targetSleepY - player.pos.y) * Math.min(1, dt * 2.5);
+          player.pitch += (player.targetSleepPitch - player.pitch) * Math.min(1, dt * 2.5);
+          camera.position.copy(player.pos);
+          camera.rotation.order = 'YXZ';
+          camera.rotation.y = player.yaw;
+          camera.rotation.x = player.pitch;
+          camera.rotation.z = 0;
+        } else if (gameState.mode === 'STEALTH') {
+          updateStealthMode(dt);
+        } else if (gameState.mode === 'DEATH_SEQUENCE') {
+          updateDeathSequence(dt);
+        } else if (gameState.mode === 'JUMPSCARE') {
+          updateAndRenderBloodOverlay(dt);
+        } else if (gameState.mode === 'VICTORY') {
+          camera.position.set(12.0 * CELL, 1.58, 8.2 * CELL);
+          camera.rotation.order = 'YXZ';
+          camera.lookAt(12.0 * CELL, 1.38, 10.6 * CELL);
+          henriNormalDay.rightArmPivot.rotation.z = -2.4 + Math.sin(now * 5.0) * 0.28;
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      animate();
+    });
+  </script>
+</body>
+</html>
